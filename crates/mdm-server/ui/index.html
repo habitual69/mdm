@@ -262,6 +262,7 @@
           <label class="check"><input type="checkbox" id="set-aria2-offload"> <span>Offload yt-dlp downloads to aria2c</span></label>
           <label class="check"><input type="checkbox" id="set-aria2-fallback"> <span>If aria2 offload fails, retry with yt-dlp's downloader</span></label>
           <small class="field-note">Aria2 fetches media with segmented, multi-connection reads. Faster on big files and keeps yt-dlp light.</small>
+          <h4 class="subsection">HTTP transfers</h4>
           <label class="field">
             <span>Connections per server</span>
             <div class="stepper-row">
@@ -307,6 +308,7 @@
             </div>
             <small class="field-note">MB. Files below this use a single connection; smaller = more segments.</small>
           </label>
+          <h4 class="subsection">Reliability &amp; speed</h4>
           <label class="field">
             <span>Retries per transfer</span>
             <div class="stepper-row">
@@ -334,6 +336,7 @@
             </div>
             <small class="field-note">K/s. Crawl-speed connections get dropped/reconnected. 0 = off.</small>
           </label>
+          <h4 class="subsection">BitTorrent</h4>
           <label class="field">
             <span>Max BT peers</span>
             <div class="stepper-row">
@@ -343,6 +346,7 @@
             </div>
             <small class="field-note">Peers connected per torrent. More is faster on popular seeds. 0 = unlimited.</small>
           </label>
+          <h4 class="subsection">Identity</h4>
           <label class="field wide">
             <span>Browser user agent</span>
             <input id="set-aria2-ua" type="text" spellcheck="false" placeholder="Mozilla/5.0 (Windows NT 10.0; ...)">

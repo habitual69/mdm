@@ -616,6 +616,18 @@ html, body {
 .settings-sub { color: var(--muted); font-size: 12.5px; margin: -4px 0 16px; }
 .settings-sub code { color: var(--accent-2); font-size: 11px; }
 
+.subsection {
+  margin: 6px 0 -2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 650;
+  letter-spacing: .45px;
+  text-transform: uppercase;
+}
+.subsection:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+
 .settings-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
@@ -631,7 +643,7 @@ html, body {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 13px;
+  gap: 11px;
   min-width: 0;
 }
 .card-head { display: flex; align-items: center; gap: 8px; margin: -2px 0 1px; }
@@ -639,9 +651,21 @@ html, body {
 .card-ico { width: 16px; height: 16px; color: var(--accent); flex: none; }
 
 .field { display: flex; flex-direction: column; gap: 5px; }
-.field.wide { grid-column: 1 / -1; }
+.field.wide input {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 9px;
+  padding: 8px 11px;
+  font: inherit;
+  font-size: 13.5px;
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .field > span { font-size: 12px; color: var(--muted); }
-.field input {
+.field input,
+.field select {
   background: var(--panel-2);
   border: 1px solid var(--line);
   color: var(--text);
@@ -651,7 +675,8 @@ html, body {
   font-size: 13.5px;
   width: 100%;
 }
-.field input:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+.field input:focus,
+.field select:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
 .stepper-row { display: flex; align-items: stretch; gap: 6px; }
 .stepper-row input {
   width: 74px;
