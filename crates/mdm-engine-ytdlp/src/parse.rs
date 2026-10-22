@@ -22,18 +22,18 @@ pub enum Line {
 
 fn parse_size(s: &str) -> Option<i64> {
     let s = s.trim();
-    if s == "UnknownB" || s == "NA" {
+    if s == "UnknownB" || s == "NA" || s.is_empty() {
         return None;
     }
     let (num, unit) = s.split_at(s.find(|c: char| c.is_ascii_alphabetic()).unwrap_or(s.len()));
     let num: f64 = num.trim().parse().ok()?;
-    let mult = match unit.trim_end_matches('B').trim().to_ascii_uppercase().as_str() {
+    let mult = match unit.to_ascii_uppercase().as_str() {
         "" | "B" => 1.0,
-        "K" | "KIB" => 1024.0,
-        "M" | "MIB" => 1024f64.powi(2),
-        "G" | "GIB" => 1024f64.powi(3),
-        "T" | "TIB" => 1024f64.powi(4),
-        _ => 1024.0, // yt-dlp uses KiB/MiB units
+        "KB" | "KIB" => 1024.0,
+        "MB" | "MIB" => 1024f64.powi(2),
+        "GB" | "GIB" => 1024f64.powi(3),
+        "TB" | "TIB" => 1024f64.powi(4),
+        _ => return None,
     };
     Some((num * mult) as i64)
 }
