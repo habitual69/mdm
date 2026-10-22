@@ -146,8 +146,8 @@ mod tests {
         match classify(line) {
             Line::Progress { pct, total, speed, eta, .. } => {
                 assert!((pct - 42.3).abs() < 0.01);
-                assert_eq!(total, Some(12_343_000));
-                assert_eq!(speed, Some(2_154_000));
+                assert_eq!(total, Some((12.34f64 * 1024.0 * 1024.0) as i64));
+                assert_eq!(speed, Some((2.15f64 * 1024.0 * 1024.0) as i64));
                 assert_eq!(eta, Some(3));
             }
             other => panic!("wrong: {other:?}"),
