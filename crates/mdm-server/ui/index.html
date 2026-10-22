@@ -94,7 +94,9 @@
             <span class="plus">+</span>
             <input id="url" type="text" placeholder="Paste a link, magnet or .torrent path…" required spellcheck="false" aria-label="Link">
             <button type="button" id="clear-btn" class="kbd-btn hidden" title="Clear">×</button>
+            <button type="button" id="browse-btn" class="kbd-btn" title="Pick a .torrent file to add">.torrent</button>
             <button type="button" id="paste-btn" class="kbd-btn"><kbd>Ctrl+V</kbd></button>
+            <input id="torrent-file" type="file" accept=".torrent,application/x-bittorrent" hidden>
           </div>
 
           <!-- shown while a URL is present -->

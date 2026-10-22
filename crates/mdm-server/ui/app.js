@@ -610,6 +610,38 @@ $("url").addEventListener("input", refreshPreview);
 $("kind").addEventListener("change", refreshPreview);
 $("url").addEventListener("keydown", (e) => { if (e.key === "Escape") { $("url").value = ""; refreshPreview(); } });
 $("clear-btn").addEventListener("click", () => { $("url").value = ""; $("url").focus(); refreshPreview(); });
+
+// Upload a picked .torrent file: store it via the server, then feed the
+// stored path back into the normal preview flow (with per-file selection).
+$("browse-btn").addEventListener("click", () => $("torrent-file").click());
+$("torrent-file").addEventListener("change", async (e) => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = ""; // allow re-picking the same file later
+  if (!f) return;
+  if (!/\.torrent$/i.test(f.name)) return notice("pick a .torrent file", true);
+  if (f.size > 8 * 1024 * 1024) return notice("torrent file too large (>8 MiB)", true);
+  try {
+    const b64 = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(String(r.result).split(",")[1] || "");
+      r.onerror = () => rej(r.error || new Error("read failed"));
+      r.readAsDataURL(f);
+    });
+    const res = await fetch("/api/torrent-upload", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: f.name, b64 }),
+    });
+    if (!res.ok) throw new Error((await res.text()) || `error ${res.status}`);
+    const { path } = await res.json();
+    go("#/home");
+    $("url").value = path;
+    refreshPreview();
+    notice(`Loaded ${f.name} — pick files to download`);
+  } catch (err) {
+    notice(`upload failed: ${err}`, true);
+  }
+});
 $("quality-seg").addEventListener("click", (e) => {
   const b = e.target.closest(".seg-btn");
   if (!b) return;

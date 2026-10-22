@@ -8,6 +8,7 @@ use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use base64::Engine as _;
 use mdm_core::{Config, Event, Job, JobState, NewJobReq, Queue};
 use mdm_engine_aria2::Aria2Engine;
 use mdm_engine_ytdlp::Ytdlp;
@@ -34,6 +35,7 @@ pub fn router(q: Arc<Queue>) -> Router {
         .route("/api/health", get(health))
         .route("/api/config", get(get_config).put(put_config))
         .route("/api/torrent-info", post(torrent_info))
+        .route("/api/torrent-upload", post(upload_torrent))
         .route("/api/jobs", post(add_job).get(list_jobs))
         .route("/api/jobs/{id}", get(get_job).delete(delete_job))
         .route("/api/jobs/{id}/pause", post(pause_job))
@@ -114,6 +116,62 @@ async fn torrent_info(
     mdm_engine_aria2::torrent_info(&p)
         .map(Json)
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct TorrentUploadReq {
+    /// Original filename, used for display and storage naming.
+    name: Option<String>,
+    /// Base64-encoded .torrent contents (browser reads the picked file).
+    b64: String,
+}
+
+/// Store an uploaded .torrent file under the data dir and return the local
+/// path it can be added from. The bytes are parsed (bencode) before storing.
+async fn upload_torrent(
+    State(_st): State<AppState>,
+    Json(req): Json<TorrentUploadReq>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(req.b64.trim())
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("bad base64: {e}")))?;
+    if bytes.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "empty torrent file".into()));
+    }
+    if bytes.len() > 8 * 1024 * 1024 {
+        return Err((StatusCode::BAD_REQUEST, "torrent file too large (>8 MiB)".into()));
+    }
+
+    // Keep a recognizable, sanitized name; a timestamp prefix avoids collisions.
+    let base = req
+        .name
+        .as_deref()
+        .map(|n| std::path::Path::new(n).file_name().and_then(|s| s.to_str()).unwrap_or("torrent").to_string())
+        .unwrap_or_else(|| "torrent.torrent".to_string());
+    let mut name = base.rsplit_once('.').map(|(s, _)| s).unwrap_or(&base).replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|', ' '], "_");
+    if name.len() > 64 {
+        name.truncate(64);
+    }
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let file_name = format!("{stamp}-{name}.torrent");
+
+    let dir = mdm_core::data_dir().join("torrents");
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("cannot create {}: {e}", dir.display())))?;
+    let path = dir.join(&file_name);
+    std::fs::write(&path, &bytes)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("cannot write {}: {e}", path.display())))?;
+
+    // Reject junk that isn't a parseable .torrent before handing it back.
+    if let Err(e) = mdm_engine_aria2::torrent_info(&path) {
+        let _ = std::fs::remove_file(&path);
+        return Err((StatusCode::BAD_REQUEST, format!("not a usable .torrent: {e}")));
+    }
+
+    Ok(Json(json!({ "path": path.to_string_lossy(), "name": file_name })))
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
