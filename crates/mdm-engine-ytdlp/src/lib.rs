@@ -141,7 +141,7 @@ impl Engine for Ytdlp {
     }
 
     async fn run(&self, job: Job, ctx: EngineCtx) -> std::result::Result<JobDone, JobError> {
-        let args = build_args(&job, self.with_aria2);
+        let args = build_args(&job, self.with_aria2, &ctx.cfg);
         debug!("yt-dlp args: {args:?}");
 
         let mut cmd = tokio::process::Command::new(&self.bin);
@@ -314,7 +314,7 @@ impl Engine for Ytdlp {
     }
 }
 
-fn build_args(job: &Job, with_aria2: bool) -> Vec<String> {
+fn build_args(job: &Job, with_aria2: bool, cfg: &Config) -> Vec<String> {
     let out = job.output_dir.display().to_string();
     let mut args: Vec<String> = vec![
         "--no-config".into(),
@@ -327,6 +327,31 @@ fn build_args(job: &Job, with_aria2: bool) -> Vec<String> {
         "-P".into(),
         out,
     ];
+
+    // App-level network settings (settings page): cap + proxy.
+    if let Some(limit) = cfg.speed_limit.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        args.extend(["--limit-rate".into(), limit.to_string()]);
+    }
+    if let Some(proxy) = cfg.proxy.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        args.extend(["--proxy".into(), proxy.to_string()]);
+    }
+
+    // Media extras: subtitles + embedding. Embeds need ffmpeg on hand.
+    let have_ffmpeg = bin_path("ffmpeg", cfg).is_ok();
+    if cfg.write_subtitles {
+        args.push("--write-subs".into());
+    }
+    if cfg.write_auto_subs {
+        args.push("--write-auto-subs".into());
+    }
+    if have_ffmpeg {
+        if cfg.embed_metadata {
+            args.push("--embed-metadata".into());
+        }
+        if cfg.embed_thumbnail {
+            args.push("--embed-thumbnail".into());
+        }
+    }
 
     match job.kind {
         mdm_core::JobKind::Video => {

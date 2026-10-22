@@ -129,10 +129,30 @@ fn map_status_values(
     (status, total, done, speed, eta)
 }
 
+impl Aria2Engine {
+    /// Push app-level speed cap / proxy to aria2's global options. Empty
+    /// strings clear existing limits ("0" = unlimited download rate).
+    async fn apply_globals(&self, cfg: &Config) -> std::result::Result<(), String> {
+        let daemon = self.daemon.get().await.map_err(|e| e.to_string())?;
+        let rpc = rpc::Aria2Rpc::new(daemon.rpc_addr.clone(), daemon.secret.clone());
+        let limit = cfg.speed_limit.as_deref().map(str::trim).filter(|s| !s.is_empty()).unwrap_or("0");
+        let proxy = cfg.proxy.as_deref().map(str::trim).filter(|s| !s.is_empty()).unwrap_or("");
+        rpc.change_global(limit, proxy)
+            .await
+            .map_err(|e| e.to_string())
+    }
+}
+
 #[async_trait]
 impl Engine for Aria2Engine {
     fn engine_kind(&self) -> EngineKind {
         EngineKind::Aria2
+    }
+
+    async fn update_config(&self, cfg: &Config) {
+        if let Err(e) = self.apply_globals(cfg).await {
+            warn!("aria2 global options not applied: {e}");
+        }
     }
 
     async fn resolve(&self, _job: &Job, _ctx: &EngineCtx) -> mdm_core::Result<ResolveInfo> {
@@ -144,6 +164,10 @@ impl Engine for Aria2Engine {
     }
 
     async fn run(&self, job: Job, ctx: EngineCtx) -> std::result::Result<JobDone, JobError> {
+        // Re-assert speed cap / proxy with this run's config snapshot.
+        if let Err(e) = self.apply_globals(&ctx.cfg).await {
+            warn!("aria2 global options not applied: {e}");
+        }
         let gid = self.reattach_or_add(&job).await?;
 
         // Persist our tracking gid early so a crash keeps the linkage.

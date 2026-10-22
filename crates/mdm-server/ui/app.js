@@ -707,6 +707,12 @@ async function loadSettings() {
     $("set-max-concurrent").value = cfg.max_concurrent;
     $("set-max-retries").value = cfg.max_retries;
     $("set-seed-minutes").value = cfg.seed_minutes;
+    $("set-speed-limit").value = cfg.speed_limit || "";
+    $("set-proxy").value = cfg.proxy || "";
+    $("set-write-subs").checked = !!cfg.write_subtitles;
+    $("set-write-auto-subs").checked = !!cfg.write_auto_subs;
+    $("set-embed-metadata").checked = cfg.embed_metadata !== false;
+    $("set-embed-thumbnail").checked = cfg.embed_thumbnail !== false;
   } catch (e) {
     notice(`cannot load settings: ${e}`, true);
   }
@@ -719,6 +725,12 @@ $("settings-form").addEventListener("submit", async (e) => {
     max_concurrent: Number($("set-max-concurrent").value) || undefined,
     max_retries: Number($("set-max-retries").value) || 0,
     seed_minutes: Number($("set-seed-minutes").value) || 0,
+    speed_limit: $("set-speed-limit").value.trim() || null,
+    proxy: $("set-proxy").value.trim() || null,
+    write_subtitles: $("set-write-subs").checked,
+    write_auto_subs: $("set-write-auto-subs").checked,
+    embed_metadata: $("set-embed-metadata").checked,
+    embed_thumbnail: $("set-embed-thumbnail").checked,
   };
   try {
     const res = await fetch("/api/config", {

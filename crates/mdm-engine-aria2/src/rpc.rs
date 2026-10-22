@@ -173,6 +173,17 @@ impl Aria2Rpc {
         Ok(v.get("version").and_then(|x| x.as_str()).unwrap_or("?").to_string())
     }
 
+    /// Set aria2 global options: overall speed cap ("0" = unlimited) and
+    /// proxy URL ("" = direct). Applies to all current and future downloads.
+    pub async fn change_global(&self, limit: &str, proxy: &str) -> Result<(), RpcError> {
+        let opts = json!({
+            "max-overall-download-limit": limit,
+            "all-proxy": proxy,
+        });
+        self.call("aria2.changeGlobalOption", vec![opts]).await?;
+        Ok(())
+    }
+
     pub async fn shutdown(self) -> Result<(), RpcError> {
         let _ = self.call("aria2.shutdown", vec![]).await;
         Ok(())

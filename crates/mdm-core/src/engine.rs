@@ -82,6 +82,10 @@ pub trait Engine: Send + Sync + 'static {
     /// Best-effort kill while the job is running (used on job removal).
     async fn remove(&self, _job: &Job) {}
 
+    /// Adopt configuration changes live (settings hot-swap). Default: no-op;
+    /// engines that read a fresh config per run don't need this.
+    async fn update_config(&self, _cfg: &Config) {}
+
     /// Queue stop: shut engine-owned daemons/processes down.
     async fn shutdown(&self) {}
 }

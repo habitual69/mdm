@@ -122,6 +122,12 @@ struct ConfigUpdate {
     output_dir: Option<std::path::PathBuf>,
     seed_minutes: Option<u32>,
     max_retries: Option<u32>,
+    speed_limit: Option<Option<String>>,
+    proxy: Option<Option<String>>,
+    write_subtitles: Option<bool>,
+    write_auto_subs: Option<bool>,
+    embed_metadata: Option<bool>,
+    embed_thumbnail: Option<bool>,
 }
 
 async fn get_config(State(st): State<AppState>) -> Json<mdm_core::Config> {
@@ -142,6 +148,37 @@ async fn put_config(
     if let Some(v) = up.seed_minutes {
         cfg.seed_minutes = v.clamp(0, 7 * 24 * 60);
     }
+    if let Some(v) = up.speed_limit {
+        if let Some(raw) = v {
+            let t = raw.trim().to_string();
+            let upper = t.to_ascii_uppercase();
+            let num = upper.trim_end_matches(['K', 'M', 'G']);
+            if t.is_empty() {
+                cfg.speed_limit = None;
+            } else if num.is_empty() || !num.chars().all(|c| c.is_ascii_digit()) {
+                return Err((StatusCode::BAD_REQUEST, format!("speed_limit: bad value {raw:?} (use e.g. 500K, 5M, 1G)")));
+            } else {
+                cfg.speed_limit = Some(t);
+            }
+        } else {
+            cfg.speed_limit = None;
+        }
+    }
+    if let Some(proxy) = up.proxy {
+        cfg.proxy = proxy;
+    }
+    if let Some(v) = up.write_subtitles {
+        cfg.write_subtitles = v;
+    }
+    if let Some(v) = up.write_auto_subs {
+        cfg.write_auto_subs = v;
+    }
+    if let Some(v) = up.embed_metadata {
+        cfg.embed_metadata = v;
+    }
+    if let Some(v) = up.embed_thumbnail {
+        cfg.embed_thumbnail = v;
+    }
     if let Some(dir) = up.output_dir {
         if dir.as_os_str().is_empty() {
             return Err((StatusCode::BAD_REQUEST, "output_dir must not be empty".into()));
@@ -153,6 +190,7 @@ async fn put_config(
     }
     mdm_core::save_config(&cfg).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     st.queue.replace_config(cfg.clone());
+    st.queue.notify_engines(&cfg).await;
     Ok(Json(cfg))
 }
 

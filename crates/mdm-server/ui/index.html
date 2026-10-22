@@ -252,6 +252,33 @@
             <small class="field-note">Minutes to seed once a torrent finishes. 0 stops right away.</small>
           </label>
         </div>
+        <div class="settings-card">
+          <div class="card-head">
+            <svg viewBox="0 0 24 24" class="card-ico"><path d="M3 9h18M3 15h7a3 3 0 0 0 6 0h5M4 5v14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <h3>Network</h3>
+          </div>
+          <label class="field">
+            <span>Speed limit</span>
+            <input id="set-speed-limit" type="text" spellcheck="false" placeholder="e.g. 5M">
+            <small class="field-note">Overall cap for every download. Empty = no limit. K/M/G units.</small>
+          </label>
+          <label class="field">
+            <span>Proxy</span>
+            <input id="set-proxy" type="text" spellcheck="false" placeholder="http://127.0.0.1:8080">
+            <small class="field-note">http or socks5 URL. Empty = direct connection.</small>
+          </label>
+        </div>
+        <div class="settings-card">
+          <div class="card-head">
+            <svg viewBox="0 0 24 24" class="card-ico"><path d="M21 3H3a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1ZM7 21h10M9 7v6m0 0 2 2m-2-2-2 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <h3>Media extras</h3>
+          </div>
+          <label class="check"><input type="checkbox" id="set-write-subs"> <span>Download subtitles</span></label>
+          <label class="check"><input type="checkbox" id="set-write-auto-subs"> <span>Include auto-generated captions</span></label>
+          <label class="check"><input type="checkbox" id="set-embed-metadata"> <span>Embed metadata &amp; chapters</span></label>
+          <label class="check"><input type="checkbox" id="set-embed-thumbnail"> <span>Embed thumbnail as cover art</span></label>
+          <small class="field-note">Defaults for video/audio (yt-dlp) downloads. Embedding needs FFmpeg.</small>
+        </div>
         <div class="settings-card save-card span-2">
           <button type="submit" class="primary" id="settings-save">Save</button>
           <span id="settings-saved" class="saved-hint" hidden>Saved &#10003;</span>

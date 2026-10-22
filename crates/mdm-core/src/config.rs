@@ -32,6 +32,18 @@ pub struct Config {
     pub api_addr: String,
     /// Automatic retries per job before it fails permanently.
     pub max_retries: u32,
+    /// Overall download speed cap shown as "5M"/"500K"/"1G" (None = unlimited).
+    pub speed_limit: Option<String>,
+    /// Proxy URL applied to every download engine (http:// or socks5://).
+    pub proxy: Option<String>,
+    /// yt-dlp: write subtitles next to / into the output file.
+    pub write_subtitles: bool,
+    /// yt-dlp: also write machine-generated captions.
+    pub write_auto_subs: bool,
+    /// yt-dlp: embed media metadata (tags, chapters) into the file.
+    pub embed_metadata: bool,
+    /// yt-dlp: embed the thumbnail as cover art.
+    pub embed_thumbnail: bool,
 }
 
 impl Default for Config {
@@ -46,6 +58,12 @@ impl Default for Config {
             seed_minutes: 5,
             api_addr: "127.0.0.1:5757".into(),
             max_retries: 2,
+            speed_limit: None,
+            proxy: None,
+            write_subtitles: false,
+            write_auto_subs: false,
+            embed_metadata: true,
+            embed_thumbnail: true,
         }
     }
 }

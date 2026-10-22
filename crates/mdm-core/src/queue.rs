@@ -106,6 +106,14 @@ impl Queue {
         *self.inner.cfg.write().unwrap() = cfg;
     }
 
+    /// Push a swapped config to engines that own long-lived state (aria2
+    /// globals). Per-run engines pick `ctx.cfg` up automatically.
+    pub async fn notify_engines(&self, cfg: &Config) {
+        for e in self.inner.engines.values() {
+            e.update_config(cfg).await;
+        }
+    }
+
     pub fn db(&self) -> &Db {
         &self.inner.db
     }

@@ -49,6 +49,10 @@ curl -s -X POST localhost:5757/api/jobs -H 'content-type: application/json' \
      -d '{"url":"magnet:?xt=...","kind":"magnet"}'
 curl -s localhost:5757/api/jobs
 curl -s localhost:5757/api/config          # GET/PUT download settings
+#   PUT fields: output_dir, max_concurrent, max_retries, seed_minutes,
+#   speed_limit ("500K"/"5M"/"1G" — overall cap for every engine), proxy
+#   (http/socks5 URL), write_subtitles, write_auto_subs, embed_metadata,
+#   embed_thumbnail
 curl -s localhost:5757/api/torrent-info -H 'content-type: application/json' \
      -d '{"path":"/path/to/x.torrent"}'    # file list for selective download
 ```
