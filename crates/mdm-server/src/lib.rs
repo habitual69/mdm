@@ -32,6 +32,7 @@ pub fn router(q: Arc<Queue>) -> Router {
         .route("/", get(ui_index))
         .route("/static/{*path}", get(ui_static))
         .route("/api/health", get(health))
+        .route("/api/config", get(get_config).put(put_config))
         .route("/api/jobs", post(add_job).get(list_jobs))
         .route("/api/jobs/{id}", get(get_job).delete(delete_job))
         .route("/api/jobs/{id}/pause", post(pause_job))
@@ -90,6 +91,48 @@ pub async fn serve_with_shutdown(
     axum::serve(listener, router(q))
         .with_graceful_shutdown(shutdown)
         .await
+}
+
+// --- download settings ------------------------------------------------------
+
+#[derive(Debug, Clone, serde::Deserialize)]
+struct ConfigUpdate {
+    max_concurrent: Option<u32>,
+    output_dir: Option<std::path::PathBuf>,
+    seed_minutes: Option<u32>,
+    max_retries: Option<u32>,
+}
+
+async fn get_config(State(st): State<AppState>) -> Json<mdm_core::Config> {
+    Json(st.queue.config())
+}
+
+async fn put_config(
+    State(st): State<AppState>,
+    Json(up): Json<ConfigUpdate>,
+) -> Result<Json<mdm_core::Config>, (StatusCode, String)> {
+    let mut cfg = st.queue.config();
+    if let Some(v) = up.max_concurrent {
+        cfg.max_concurrent = v.clamp(1, 16);
+    }
+    if let Some(v) = up.max_retries {
+        cfg.max_retries = v.clamp(0, 10);
+    }
+    if let Some(v) = up.seed_minutes {
+        cfg.seed_minutes = v.clamp(0, 7 * 24 * 60);
+    }
+    if let Some(dir) = up.output_dir {
+        if dir.as_os_str().is_empty() {
+            return Err((StatusCode::BAD_REQUEST, "output_dir must not be empty".into()));
+        }
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            return Err((StatusCode::BAD_REQUEST, format!("cannot create {}: {e}", dir.display())));
+        }
+        cfg.output_dir = dir;
+    }
+    mdm_core::save_config(&cfg).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    st.queue.replace_config(cfg.clone());
+    Ok(Json(cfg))
 }
 
 fn err_reply(e: mdm_core::Error) -> (StatusCode, String) {

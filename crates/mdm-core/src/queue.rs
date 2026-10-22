@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use tokio::sync::{broadcast, mpsc, oneshot};
@@ -35,7 +35,7 @@ enum Cmd {
 
 struct Inner {
     db: Db,
-    cfg: Config,
+    cfg: RwLock<Config>,
     engines: HashMap<EngineKind, Arc<dyn Engine>>,
     events: broadcast::Sender<Event>,
     runner_tx: RunnerTx,
@@ -74,7 +74,7 @@ impl Queue {
 
         let inner = Arc::new(Inner {
             db,
-            cfg,
+            cfg: RwLock::new(cfg),
             engines: map,
             events,
             runner_tx,
@@ -93,8 +93,14 @@ impl Queue {
         self.inner.events.subscribe()
     }
 
-    pub fn config(&self) -> &Config {
-        &self.inner.cfg
+    pub fn config(&self) -> Config {
+        self.inner.cfg.read().unwrap().clone()
+    }
+
+    /// Hot-swaps the in-memory config (settings page); callers persist to
+    /// disk separately.
+    pub fn replace_config(&self, cfg: Config) {
+        *self.inner.cfg.write().unwrap() = cfg;
     }
 
     pub fn db(&self) -> &Db {
@@ -109,7 +115,7 @@ impl Queue {
             return Err(Error::Engine("refusing flag-like URL".into()));
         }
         let kind = req.kind.unwrap_or_else(|| JobKind::detect(&req.url));
-        let cfg = &self.inner.cfg;
+        let cfg = self.inner.cfg.read().unwrap();
         let job = Job::new(
             req.url.trim(),
             kind,
@@ -223,7 +229,7 @@ fn resolve_engine(st: &ManagerShared, job: &Job) -> Arc<dyn Engine> {
 }
 
 async fn admit(st: &mut ManagerShared) {
-    let max = st.inner.cfg.max_concurrent.max(1) as usize;
+    let max = st.inner.cfg.read().unwrap().max_concurrent.max(1) as usize;
     while st.running.len() < max {
         let job = match st.inner.db.claim_next_queued() {
             Ok(Some(j)) => j,
@@ -238,7 +244,7 @@ async fn admit(st: &mut ManagerShared) {
         let token = CancellationToken::new();
         st.running.insert(job.id.clone(), token.clone());
         let ctx = EngineCtx {
-            cfg: st.inner.cfg.clone(),
+            cfg: st.inner.cfg.read().unwrap().clone(),
             cancel: token,
             runner_tx: st.inner.runner_tx.clone(),
             events: st.inner.events.clone(),
@@ -294,7 +300,7 @@ fn finalize(st: &mut ManagerShared, job_id: &str, result: std::result::Result<Jo
                 .flatten()
                 .map(|j| j.retries)
                 .unwrap_or(0);
-            let max = st.inner.cfg.max_retries as i64;
+            let max = st.inner.cfg.read().unwrap().max_retries as i64;
             let msg = err.message();
             match err {
                 JobError::Retry(_) if retries < max => {

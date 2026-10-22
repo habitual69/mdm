@@ -4,58 +4,211 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>mdm — Media Download Manager</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23e8934a'/%3E%3Cpath d='M16 7v11m-5-4l5 5 5-5M8 25h16' stroke='%23161a21' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-<header class="topbar">
-  <div class="brand">
-    <span class="logo">mdm</span>
-    <span class="sub">Media Download Manager</span>
-  </div>
-  <div class="health"><span id="health-dot" class="dot ok"></span><span id="health-text">connecting…</span></div>
-</header>
 
-<main>
-  <form id="add-form" class="addbar" autocomplete="off">
-    <input id="url" type="text" placeholder="Paste a link — video, torrent or magnet…" required spellcheck="false">
-    <select id="kind" title="Type (auto-detect if empty)">
-      <option value="">auto</option>
-      <option value="video">video</option>
-      <option value="audio">audio</option>
-      <option value="direct">file</option>
-      <option value="torrent">torrent</option>
-      <option value="magnet">magnet</option>
-    </select>
-    <select id="format" title="yt-dlp format selector">
-      <option value="">best</option>
-      <option value="bestvideo+bestaudio/b">best (explicit)</option>
-      <option value="bestvideo[height<=1080]+bestaudio/b">≤1080p</option>
-      <option value="bestvideo[height<=720]+bestaudio/b">≤720p</option>
-      <option value="bestvideo[height<=480]+bestaudio/b">≤480p</option>
-    </select>
-    <button type="submit" id="add-btn">Download</button>
-  </form>
+<!-- shared svg: mascot + gradients -->
+<svg class="defs-svg" aria-hidden="true">
+  <defs>
+    <radialGradient id="g-hero" cx="0.5" cy="0.5" r="0.75">
+      <stop offset="0" stop-color="#f2a95c"/>
+      <stop offset="1" stop-color="#c96a2e"/>
+    </radialGradient>
+    <g id="mascot">
+      <circle cx="60" cy="62" r="44" fill="url(#g-hero)"/>
+      <circle cx="46" cy="44" r="6.5" fill="#141820"/>
+      <circle cx="74" cy="44" r="6.5" fill="#141820"/>
+      <circle cx="48" cy="42" r="2" fill="#fff"/>
+      <circle cx="76" cy="42" r="2" fill="#fff"/>
+      <path d="M47 57 Q60 66 73 57" stroke="#141820" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+      <rect x="54.5" y="70" width="11" height="16" rx="5.5" fill="#141820"/>
+      <path d="M42 80 h36 L60 97 Z" fill="#141820"/>
+    </g>
+  </defs>
+</svg>
 
-  <div id="notice" class="notice hidden"></div>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <svg class="tile" viewBox="0 0 120 120"><use href="#mascot"/></svg>
+      <div class="brand-text"><b>mdm</b><small>download manager</small></div>
+    </div>
 
-  <table class="queue">
-    <thead>
-      <tr>
-        <th class="c-name">File</th>
-        <th class="c-kind">Type</th>
-        <th class="c-state">State</th>
-        <th class="c-prog">Progress</th>
-        <th class="c-size">Size</th>
-        <th class="c-speed">Speed</th>
-        <th class="c-eta">ETA</th>
-        <th class="c-actions"></th>
-      </tr>
-    </thead>
-    <tbody id="queue-body"></tbody>
-  </table>
+    <nav class="nav">
+      <button class="nav-item" data-nav="#/home">
+        <svg viewBox="0 0 24 24"><path d="M3.5 10.5 12 3.5l8.5 7M6 9v11h12V9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Home</span>
+      </button>
+      <button class="nav-item" data-nav="#/downloads">
+        <svg viewBox="0 0 24 24"><path d="M12 4v10m-4.5-4 4.5 4.5L16.5 10M5 19.5h14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Downloads</span>
+        <em id="badge-active" class="badge hidden"></em>
+      </button>
 
-  <div id="empty" class="empty hidden">Nothing queued yet. Paste a link above.</div>
-</main>
+      <div class="section">Categories</div>
+      <button class="nav-item cat" data-kind="#/downloads/video">
+        <svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M10.5 9.2 14.8 12l-4.3 2.8z" fill="currentColor"/></svg>
+        <span>Video</span>
+      </button>
+      <button class="nav-item cat" data-kind="#/downloads/audio">
+        <svg viewBox="0 0 24 24"><path d="M4.5 14a7.5 7.5 0 0 1 15 0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><rect x="3.5" y="13.5" width="4.4" height="6.5" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="16.1" y="13.5" width="4.4" height="6.5" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
+        <span>Audio</span>
+      </button>
+      <button class="nav-item cat" data-kind="#/downloads/torrents">
+        <svg viewBox="0 0 24 24"><path d="M6 3.5v7.5a6 6 0 0 0 12 0V3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M6 3.5h4.4V8H6zM13.6 3.5H18V8h-4.4z" fill="currentColor"/></svg>
+        <span>Torrents</span>
+      </button>
+      <button class="nav-item cat" data-kind="#/downloads/files">
+        <svg viewBox="0 0 24 24"><path d="M6 3.5h7.5L19 9v11.5H6zM13.5 3.7V9H19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Files</span>
+      </button>
+
+      <div class="section">App</div>
+      <button class="nav-item" data-nav="#/settings">
+        <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="9.5" cy="7" r="2.1" fill="currentColor"/><circle cx="14.5" cy="12" r="2.1" fill="currentColor"/><circle cx="8" cy="17" r="2.1" fill="currentColor"/></svg>
+        <span>Settings</span>
+      </button>
+    </nav>
+
+    <div class="side-foot">
+      <div class="health"><span id="health-dot" class="dot"></span><span id="health-text">connecting…</span></div>
+      <button id="collapse" class="side-btn" title="Collapse sidebar (Ctrl+Shift+S)">
+        <svg viewBox="0 0 24 24"><path d="M14.5 5.5 8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Collapse sidebar</span>
+      </button>
+    </div>
+  </aside>
+
+  <main class="panel">
+    <div id="notice" class="notice hidden" role="status"></div>
+
+    <!-- Home: paste a link -->
+    <section id="view-home" class="view">
+      <div class="hero">
+        <svg class="mascot" viewBox="0 0 120 120"><use href="#mascot"/></svg>
+
+        <form id="add-form" class="home-stack" autocomplete="off">
+          <div class="paste-bar">
+            <span class="plus">+</span>
+            <input id="url" type="text" placeholder="Paste a link — video, torrent or magnet…" required spellcheck="false" aria-label="Link">
+            <button type="button" id="paste-btn" class="kbd-btn"><kbd>Ctrl+V</kbd></button>
+          </div>
+
+          <!-- shown while a URL is present -->
+          <div id="add-card" class="add-card hidden">
+            <div id="preview-line" class="preview-line"><b id="pv-site">YouTube</b> <span class="dotsep">·</span> <span id="pv-type">Video</span></div>
+            <button type="submit" id="add-btn" class="primary wide-btn">Download video</button>
+
+            <details class="advance" open>
+              <summary>Quality and more</summary>
+              <div class="seg" id="quality-seg" role="radiogroup">
+                <button type="button" class="seg-btn on" data-fmt="">✦ Auto</button>
+                <button type="button" class="seg-btn" data-fmt="bestaudio/best">♫ Audio only</button>
+                <button type="button" class="seg-btn" data-fmt="bestvideo/best">◱ Video, no sound</button>
+              </div>
+              <div class="out-row">
+                <svg viewBox="0 0 24 24"><path d="M3.5 7.5v11h17v-9h-8l-2-2h-7z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+                <span>Output:</span><b id="out-dir-label">~/Downloads/mdm</b>
+                <input id="out-dir-input" class="hidden" type="text" spellcheck="false">
+                <button type="button" id="out-dir-save" class="mini-btn hidden">Save</button>
+              </div>
+
+              <details class="advance adv-2">
+                <summary>Advanced</summary>
+                <div class="adv-grid">
+                  <label><span>Type</span>
+                    <select id="kind">
+                      <option value="">auto</option>
+                      <option value="video">video</option>
+                      <option value="audio">audio</option>
+                      <option value="direct">file</option>
+                      <option value="torrent">torrent</option>
+                      <option value="magnet">magnet</option>
+                    </select>
+                  </label>
+                  <label><span>Format selector (-f)</span>
+                    <input id="format" type="text" placeholder="best" spellcheck="false">
+                  </label>
+                </div>
+              </details>
+            </details>
+          </div>
+        </form>
+
+        <div id="hero-foot">
+          <p class="hero-sub">Works with YouTube, Instagram, TikTok and 1,000+ other sites.<br>
+          Torrents and magnets run through <b>aria2</b>.</p>
+          <div class="stats">
+            <button class="stat" data-nav="#/downloads"><b id="stat-running">0</b><span>running</span></button>
+            <button class="stat" data-nav="#/downloads"><b id="stat-queued">0</b><span>queued</span></button>
+            <button class="stat" data-nav="#/downloads"><b id="stat-done">0</b><span>finished</span></button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Downloads: grouped cards -->
+    <section id="view-downloads" class="view" hidden>
+      <div class="head-row">
+        <h2>Downloads</h2>
+        <div class="head-tools">
+          <input id="search" class="search" type="text" placeholder="Search" spellcheck="false">
+          <button id="go-add" class="side-btn">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 8.5v7M8.5 12h7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+            <span>Add link</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="chips" id="state-chips">
+        <button class="chip on" data-state="all">All <b class="chip-n" id="n-all">0</b></button>
+        <button class="chip" data-state="active">Active <b class="chip-n" id="n-active">0</b></button>
+        <button class="chip" data-state="done">Completed <b class="chip-n" id="n-done">0</b></button>
+        <button class="chip" data-state="failed">Failed <b class="chip-n" id="n-failed">0</b></button>
+      </div>
+      <div id="kind-note" class="kind-note hidden"></div>
+
+      <div id="cards" class="cards"></div>
+      <div id="empty" class="empty hidden">Nothing here yet.</div>
+
+      <div id="dl-footer" class="dl-footer hidden">
+        <span id="dl-footer-text">—</span>
+        <div class="bar slim"><i id="overall-bar"></i></div>
+        <b id="overall-pct">0%</b>
+      </div>
+    </section>
+
+    <!-- Settings: download defaults -->
+    <section id="view-settings" class="view" hidden>
+      <h2>Download settings</h2>
+      <form id="settings-form" class="settings-card">
+        <label class="field wide">
+          <span>Output folder</span>
+          <input id="set-output-dir" type="text" spellcheck="false">
+        </label>
+        <label class="field">
+          <span>Max parallel downloads</span>
+          <input id="set-max-concurrent" type="number" min="1" max="16" step="1">
+        </label>
+        <label class="field">
+          <span>Retries per download</span>
+          <input id="set-max-retries" type="number" min="0" max="10" step="1">
+        </label>
+        <label class="field">
+          <span>Keep seeding torrents (minutes)</span>
+          <input id="set-seed-minutes" type="number" min="0" max="10080" step="1">
+          <small class="field-note">0 stops as soon as a torrent finishes. Applies to new torrents.</small>
+        </label>
+        <div class="save-row">
+          <button type="submit" class="primary">Save</button>
+          <small class="field-note">Stored in <code>~/.local/share/mdm/config.toml</code>.</small>
+        </div>
+      </form>
+    </section>
+  </main>
+</div>
 <script src="/static/app.js"></script>
 </body>
 </html>

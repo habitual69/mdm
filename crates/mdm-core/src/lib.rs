@@ -10,7 +10,7 @@ mod events;
 mod model;
 mod queue;
 
-pub use config::{config_path, data_dir, ensure_dir, load_config, Config};
+pub use config::{config_path, data_dir, ensure_dir, load_config, save_config, Config};
 pub use engine::{bin_path, Engine, EngineCtx, JobDone, JobError, ResolveInfo, RunnerMsg, RunnerTx};
 pub use error::{Error, Result};
 pub use events::{Event, EventRx, EventTx};
