@@ -1,0 +1,20 @@
+[package]
+name = "mdm-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "mdm"
+path = "src/main.rs"
+
+[dependencies]
+mdm-core = { workspace = true }
+mdm-server = { path = "../mdm-server" }
+tokio.workspace = true
+clap.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

@@ -1,0 +1,53 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/mdm-core",
+    "crates/mdm-engine-ytdlp",
+    "crates/mdm-engine-aria2",
+    "crates/mdm-server",
+    "crates/mdm-cli",
+]
+
+[workspace.package]
+version = "0.1.0-alpha.1"
+edition = "2024"
+
+[workspace.dependencies]
+mdm-core = { path = "crates/mdm-core" }
+mdm-engine-ytdlp = { path = "crates/mdm-engine-ytdlp" }
+mdm-engine-aria2 = { path = "crates/mdm-engine-aria2" }
+
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "macros",
+    "sync",
+    "time",
+    "process",
+    "fs",
+    "io-util",
+    "signal",
+] }
+tokio-util = { version = "0.7", features = ["rt"] }
+async-trait = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+rusqlite = { version = "0.37", features = ["bundled"] }
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "6"
+toml = "0.9"
+axum = { version = "0.8", features = ["ws"] }
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "rustls-tls",
+] }
+base64 = "0.22"
+clap = { version = "4", features = ["derive"] }
+futures-util = "0.3"
+
+[profile.release]
+lto = "thin"

@@ -1,0 +1,8 @@
+/target
+/dist
+*.log
+*.sqlite3
+*.sqlite3-*
+aria2.session
+mdm.pid
+.DS_Store
