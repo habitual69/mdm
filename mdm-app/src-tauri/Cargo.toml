@@ -1,0 +1,17 @@
+[package]
+name = "mdm-app"
+version.workspace = true
+edition.workspace = true
+description = "mdm desktop shell — loads the mdm web UI in a native window"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+mdm-core = { workspace = true }
+mdm-bins = { workspace = true }
+mdm-server = { workspace = true }
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tauri = { version = "2", features = [] }

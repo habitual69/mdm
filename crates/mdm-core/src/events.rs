@@ -5,7 +5,7 @@ use crate::model::Job;
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type")]
 pub enum Event {
-    JobUpdated { job: Job },
+    JobUpdated { job: Box<Job> },
     JobRemoved { id: String },
     QueueIdle,
 }

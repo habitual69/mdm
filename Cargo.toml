@@ -7,6 +7,7 @@ members = [
     "crates/mdm-bins",
     "crates/mdm-server",
     "crates/mdm-cli",
+    "mdm-app/src-tauri",
 ]
 
 [workspace.package]
@@ -18,6 +19,7 @@ mdm-core = { path = "crates/mdm-core" }
 mdm-engine-ytdlp = { path = "crates/mdm-engine-ytdlp" }
 mdm-engine-aria2 = { path = "crates/mdm-engine-aria2" }
 mdm-bins = { path = "crates/mdm-bins" }
+mdm-server = { path = "crates/mdm-server" }
 
 tokio = { version = "1", features = [
     "rt-multi-thread",

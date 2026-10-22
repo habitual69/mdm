@@ -120,14 +120,10 @@ impl Engine for Aria2Engine {
         EngineKind::Aria2
     }
 
-    async fn resolve(&self, job: &Job, _ctx: &EngineCtx) -> mdm_core::Result<ResolveInfo> {
+    async fn resolve(&self, _job: &Job, _ctx: &EngineCtx) -> mdm_core::Result<ResolveInfo> {
         // Magnets/torrents: no cheap metadata until metadata exchange; report as-is.
         Ok(ResolveInfo {
-            title: if job.kind == mdm_core::JobKind::Magnet {
-                None
-            } else {
-                None
-            },
+            title: None,
             n_items: None,
         })
     }
@@ -168,22 +164,19 @@ impl Engine for Aria2Engine {
                     };
 
                     // Magnet metadata resolution hands off to a child gid.
-                    if let Some(children) = status.get("followedBy").and_then(|f| f.as_array()) {
-                        if let Some(child) = children.first() {
-                            if let Some(child_gid) = child.as_str() {
-                                if child_gid != tracking_gid {
-                                    tracking_gid = child_gid.to_string();
-                                    ctx.send_patch(
-                                        &job.id,
-                                        JobPatch {
-                                            external_id: Some(tracking_gid.clone()),
-                                            ..Default::default()
-                                        },
-                                    );
-                                    continue;
-                                }
-                            }
-                        }
+                    if let Some(children) = status.get("followedBy").and_then(|f| f.as_array())
+                        && let Some(child_gid) = children.first().and_then(|c| c.as_str())
+                        && child_gid != tracking_gid
+                    {
+                        tracking_gid = child_gid.to_string();
+                        ctx.send_patch(
+                            &job.id,
+                            JobPatch {
+                                external_id: Some(tracking_gid.clone()),
+                                ..Default::default()
+                            },
+                        );
+                        continue;
                     }
 
                     let (status_str, total, done, speed, eta) = map_status_values(&status);
@@ -299,12 +292,12 @@ impl Engine for Aria2Engine {
     }
 
     async fn remove(&self, job: &Job) {
-        if let Some(gid) = job.external_id.clone() {
-            if let Ok(daemon) = self.daemon.get().await {
-                let rpc = rpc::Aria2Rpc::new(daemon.rpc_addr.clone(), daemon.secret.clone());
-                let _ = rpc.force_remove(&gid).await;
-                let _ = rpc.remove_download_result(&gid).await;
-            }
+        if let Some(gid) = job.external_id.clone()
+            && let Ok(daemon) = self.daemon.get().await
+        {
+            let rpc = rpc::Aria2Rpc::new(daemon.rpc_addr.clone(), daemon.secret.clone());
+            let _ = rpc.force_remove(&gid).await;
+            let _ = rpc.remove_download_result(&gid).await;
         }
     }
 

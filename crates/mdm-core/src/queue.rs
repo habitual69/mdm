@@ -117,7 +117,7 @@ impl Queue {
             req.format.unwrap_or_else(|| "best".into()),
         );
         self.inner.db.insert_job(&job)?;
-        let _ = self.inner.events.send(Event::JobUpdated { job: job.clone() });
+        let _ = self.inner.events.send(Event::JobUpdated { job: Box::new(job.clone()) });
         let _ = self.inner.cmd_tx.send(Cmd::Wake);
         Ok(job)
     }
@@ -189,7 +189,7 @@ async fn manager_loop(
                         let mut patch = patch;
                         patch.id = job_id;
                         if let Ok(Some(job)) = st.inner.db.apply_patch(&patch) {
-                            st.emit(Event::JobUpdated { job });
+                            st.emit(Event::JobUpdated { job: Box::new(job) });
                         }
                     }
                     Some(RunnerMsg::Done { job_id, result }) => {
@@ -274,10 +274,10 @@ fn finalize(st: &mut ManagerShared, job_id: &str, result: std::result::Result<Jo
             if removal_requested {
                 let _ = st.inner.db.delete_job(job_id);
                 st.emit(Event::JobRemoved { id: job_id.into() });
-            } else if let Ok(Some(job)) = st.inner.db.get_job(job_id) {
-                if job.state == JobState::Running {
-                    apply_and_emit(st, JobPatch::for_id(job_id, JobState::Paused));
-                }
+            } else if let Ok(Some(job)) = st.inner.db.get_job(job_id)
+                && job.state == JobState::Running
+            {
+                apply_and_emit(st, JobPatch::for_id(job_id, JobState::Paused));
             }
         }
         Err(err) => {
@@ -320,7 +320,7 @@ fn finalize(st: &mut ManagerShared, job_id: &str, result: std::result::Result<Jo
 
 fn apply_and_emit(st: &mut ManagerShared, patch: JobPatch) {
     match st.inner.db.apply_patch(&patch) {
-        Ok(Some(job)) => st.emit(Event::JobUpdated { job }),
+        Ok(Some(job)) => st.emit(Event::JobUpdated { job: Box::new(job) }),
         Ok(None) => {}
         Err(e) => warn!("db patch failed: {e}"),
     }

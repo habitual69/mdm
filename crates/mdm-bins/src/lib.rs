@@ -238,21 +238,20 @@ impl Installer {
 
             let bytes = util::fetch_bytes(&self.http, archive_url).await?;
             let mut sha_ok: Option<bool> = None;
-            if let Ok(text) = util::fetch_text(&self.http, &sha_url).await {
-                if let Some(exp) = text
+            if let Ok(text) = util::fetch_text(&self.http, &sha_url).await
+                && let Some(exp) = text
                     .lines()
                     .next()
                     .and_then(|l| l.split_whitespace().next())
                     .filter(|s| s.len() == 64 && s.chars().all(|c| c.is_ascii_hexdigit()))
-                {
-                    let actual = util::sha256_bytes(&bytes);
-                    if !actual.eq_ignore_ascii_case(exp) {
-                        return Err(Error::Engine(format!(
-                            "ffmpeg sha256 mismatch: expected {exp}, got {actual}"
-                        )));
-                    }
-                    sha_ok = Some(true);
+            {
+                let actual = util::sha256_bytes(&bytes);
+                if !actual.eq_ignore_ascii_case(exp) {
+                    return Err(Error::Engine(format!(
+                        "ffmpeg sha256 mismatch: expected {exp}, got {actual}"
+                    )));
                 }
+                sha_ok = Some(true);
             }
 
             let tmp = std::env::temp_dir().join("mdm_ffmpeg.tar.xz");

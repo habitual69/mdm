@@ -61,19 +61,19 @@ pub fn classify(line: &str) -> Line {
     }
 
     // Playlist item counter.
-    if let Some(rest) = t.strip_prefix("[download] Downloading item ") {
-        if let Some((idx, n)) = rest.split_once(" of ") {
-            return match (idx.trim().parse(), n.trim().parse()) {
-                (Ok(i), Ok(n)) => Line::Item { idx: i, n },
-                _ => Line::Ignore,
-            };
-        }
+    if let Some(rest) = t.strip_prefix("[download] Downloading item ")
+        && let Some((idx, n)) = rest.split_once(" of ")
+    {
+        return match (idx.trim().parse(), n.trim().parse()) {
+            (Ok(i), Ok(n)) => Line::Item { idx: i, n },
+            _ => Line::Ignore,
+        };
     }
 
     if let Some(rest) = t.strip_prefix("[download] ") {
         if let Some(rest) = rest.strip_prefix("Destination: ") {
             let p = PathBuf::from(rest.trim());
-            if p.as_os_str().len() > 0 {
+            if !p.as_os_str().is_empty() {
                 return Line::Destination(p);
             }
         }
@@ -109,19 +109,17 @@ pub fn classify(line: &str) -> Line {
     }
 
     // Post-processing phases: [Merger], [ExtractAudio], [EmbedSubtitle]...
-    if t.starts_with('[') {
-        if let Some(end) = t.find(']') {
-            let tag = &t[1..end];
-            if tag == "download" {
-                return Line::Ignore;
-            }
-            return Line::PostProcess(tag.to_string());
+    if t.starts_with('[') && let Some(end) = t.find(']') {
+        let tag = &t[1..end];
+        if tag == "download" {
+            return Line::Ignore;
         }
+        return Line::PostProcess(tag.to_string());
     }
 
     // Bare absolute path (from `--print after_move:filepath`).
     let candidate = PathBuf::from(t);
-    if candidate.as_os_str().len() > 0 && candidate.is_absolute() && !t.starts_with('[') {
+    if !candidate.as_os_str().is_empty() && candidate.is_absolute() && !t.starts_with('[') {
         return Line::FinalPath(candidate);
     }
 

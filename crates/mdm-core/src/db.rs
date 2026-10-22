@@ -132,7 +132,7 @@ impl Db {
         self.with(|c| {
             let (where_sql, values): (String, Vec<Sql>) = match states {
                 None => (String::new(), Vec::new()),
-                Some(list) if list.is_empty() => (String::new(), Vec::new()),
+                Some([]) => (String::new(), Vec::new()),
                 Some(list) => {
                     let marks: Vec<&str> = list.iter().map(|_| "?").collect();
                     (
@@ -248,7 +248,7 @@ impl Db {
             if patch.bump_retries {
                 sets.push("retries = retries + 1".into());
             }
-            if let Some(v) = patch.retry_at.clone() {
+            if let Some(v) = patch.retry_at {
                 match v {
                     Some(ts) => push("retry_at", Sql::Integer(ts), &mut sets),
                     None => push("retry_at", Sql::Null, &mut sets),

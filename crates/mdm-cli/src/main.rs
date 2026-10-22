@@ -281,7 +281,7 @@ async fn run_setup(force: bool, only: Option<String>) -> Result<()> {
                 println!("  {:<8} OK   {ver}\n          -> {path}", st.name, ver = version);
             }
             mdm_bins::BinAction::Skipped { reason } => {
-                println!("  {:<8} {} ({reason})", st.name, "MISSING");
+                println!("  {:<8} MISSING ({reason})", st.name);
             }
             other => println!("  {:<8} {:?}", st.name, other),
         }
@@ -407,8 +407,8 @@ fn eta_text(eta: Option<i64>) -> String {
 
 fn print_table(jobs: &[mdm_core::Job]) {
     println!(
-        "{:<9} {:<7} {:<8} {:>6} {:>9} {:>10} {:>6}  {}",
-        "ID", "KIND", "STATE", "PCT", "SIZE", "SPEED", "ETA", "NAME"
+        "{:<9} {:<7} {:<8} {:>6} {:>9} {:>10} {:>6}  NAME",
+        "ID", "KIND", "STATE", "PCT", "SIZE", "SPEED", "ETA"
     );
     for j in jobs {
         let name = j

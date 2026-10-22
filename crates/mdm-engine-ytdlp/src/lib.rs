@@ -198,25 +198,25 @@ impl Engine for Ytdlp {
                 status = child.wait() => {
                     // Child exited before stdout EOF; drain the rest quickly.
                     let final_status = status;
-                    if let Ok(s) = &final_status {
-                        if s.success() {
-                            // Drain remaining stdout lines best-effort.
-                            let deadline = tokio::time::sleep(Duration::from_millis(500));
-                            tokio::pin!(deadline);
-                            loop {
-                                tokio::select! {
-                                    _ = &mut deadline => break,
-                                    n = reader.read_line(&mut line_buf) => {
-                                        if n.unwrap_or(0) == 0 { break; }
-                                        handle_line(
-                                            line_buf.trim_end_matches(['\r','\n']),
-                                            &job,
-                                            &ctx,
-                                            &mut final_path,
-                                            &mut last_emit,
-                                        );
-                                        line_buf.clear();
-                                    }
+                    if let Ok(s) = &final_status
+                        && s.success()
+                    {
+                        // Drain remaining stdout lines best-effort.
+                        let deadline = tokio::time::sleep(Duration::from_millis(500));
+                        tokio::pin!(deadline);
+                        loop {
+                            tokio::select! {
+                                _ = &mut deadline => break,
+                                n = reader.read_line(&mut line_buf) => {
+                                    if n.unwrap_or(0) == 0 { break; }
+                                    handle_line(
+                                        line_buf.trim_end_matches(['\r','\n']),
+                                        &job,
+                                        &ctx,
+                                        &mut final_path,
+                                        &mut last_emit,
+                                    );
+                                    line_buf.clear();
                                 }
                             }
                         }
@@ -269,16 +269,14 @@ impl Engine for Ytdlp {
         }
 
         // stdout EOF before exit: wait for the child to terminate.
-        let status = loop {
-            tokio::select! {
-                biased;
-                _ = ctx.cancel.cancelled() => {
-                    signal::kill_tree(pid);
-                    self.unregister_child(&job.id);
-                    return Err(JobError::Cancelled);
-                }
-                s = child.wait() => break s,
+        let status = tokio::select! {
+            biased;
+            _ = ctx.cancel.cancelled() => {
+                signal::kill_tree(pid);
+                self.unregister_child(&job.id);
+                return Err(JobError::Cancelled);
             }
+            s = child.wait() => s,
         };
 
         let stderr_tail = stderr_task.await.unwrap_or_default();

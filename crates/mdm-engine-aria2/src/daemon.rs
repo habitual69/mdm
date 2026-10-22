@@ -132,7 +132,7 @@ impl DaemonHandle {
         self.cell
             .get_or_try_init(|| async { Aria2Daemon::spawn(&self.cfg, &self.data_dir).await })
             .await
-            .map(|d| d.clone())
+            .map(Arc::clone)
     }
 
     /// Returns the running daemon without spawning one.
