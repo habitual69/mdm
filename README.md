@@ -55,7 +55,15 @@ curl -s localhost:5757/api/config          # GET/PUT download settings
 #   embed_thumbnail, aria2_offload (hand yt-dlp transfers to aria2c),
 #   aria2_connections (1-16, per HTTP server), aria2_splits (1-16),
 #   aria2_connect_timeout (5-300 s),
-#   aria2_fallback (retry failed aria2 offload with yt-dlp's own downloader)
+#   aria2_fallback (retry failed aria2 offload with yt-dlp's own downloader),
+#   aria2_disk_cache (MB, 0 off), aria2_file_allocation (none|prealloc|trunc|falloc),
+#   aria2_min_split_size (1-1024 MB), aria2_max_tries (0-20, 0 unlimited),
+#   aria2_retry_wait (0-60 s), aria2_lowest_speed_limit (K/s, 0 off),
+#   aria2_bt_max_peers (0-500), aria2_user_agent (browser UA masquerade)
+# yt-dlp advanced: ytdlp_max_height (0=best or 360..2160),
+#   ytdlp_merge_format (mkv|mp4|webm), ytdlp_audio_format
+#   (mp3|m4a|opus|flac|wav|vorbis|best), ytdlp_fragments (1-16),
+#   ytdlp_embed_subs
 curl -s localhost:5757/api/torrent-info -H 'content-type: application/json' \
      -d '{"path":"/path/to/x.torrent"}'    # file list for selective download
 ```

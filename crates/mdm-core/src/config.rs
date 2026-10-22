@@ -57,6 +57,38 @@ pub struct Config {
     /// downloader so downloads still complete on networks that block
     /// aria2's transfer path.
     pub aria2_fallback: bool,
+    /// aria2: RAM disk cache in MB before flushes to disk (P3TERX style).
+    /// 0 = disabled.
+    pub aria2_disk_cache: u32,
+    /// aria2: file preallocation mode (none | prealloc | trunc | falloc).
+    /// falloc suits spinning HDDs; leave `none` on SSDs.
+    pub aria2_file_allocation: String,
+    /// aria2: smallest piece a download is divided into, in MB (1..=1024).
+    pub aria2_min_split_size: u32,
+    /// aria2: attempts per URI before giving up. 0 = unlimited.
+    pub aria2_max_tries: u32,
+    /// aria2: pause between retry attempts, seconds (0..=60).
+    pub aria2_retry_wait: u32,
+    /// aria2: drop connections slower than this KiB/s (0 = off). Retry
+    /// builds reconnect instead of stalling.
+    pub aria2_lowest_speed_limit: u32,
+    /// aria2: max peers per torrent (0 = unlimited).
+    pub aria2_bt_max_peers: u32,
+    /// aria2: HTTP user agent for direct downloads. Empty = aria2 default.
+    /// Browser-like agents dodge "aria2/*" server bans.
+    pub aria2_user_agent: String,
+    /// yt-dlp: cap video height in px for "best" requests. 0 = no cap.
+    pub ytdlp_max_height: u32,
+    /// yt-dlp: container used when merging separate streams (mkv|mp4|webm).
+    pub ytdlp_merge_format: String,
+    /// yt-dlp: audio conversion target for audio jobs
+    /// (mp3|m4a|opus|flac|wav|vorbis|best). "best" keeps the source codec.
+    pub ytdlp_audio_format: String,
+    /// yt-dlp: parallel fragment downloads for its native downloader,
+    /// 1..=16 (the aria2 fallback path uses this).
+    pub ytdlp_fragments: u32,
+    /// yt-dlp: pack downloaded subtitles into the output file (needs ffmpeg).
+    pub ytdlp_embed_subs: bool,
 }
 
 impl Default for Config {
@@ -82,6 +114,19 @@ impl Default for Config {
             aria2_splits: 8,
             aria2_connect_timeout: 30,
             aria2_fallback: true,
+            aria2_disk_cache: 64,
+            aria2_file_allocation: "none".into(),
+            aria2_min_split_size: 4,
+            aria2_max_tries: 3,
+            aria2_retry_wait: 5,
+            aria2_lowest_speed_limit: 0,
+            aria2_bt_max_peers: 128,
+            aria2_user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36".into(),
+            ytdlp_max_height: 0,
+            ytdlp_merge_format: "mkv".into(),
+            ytdlp_audio_format: "mp3".into(),
+            ytdlp_fragments: 4,
+            ytdlp_embed_subs: false,
         }
     }
 }

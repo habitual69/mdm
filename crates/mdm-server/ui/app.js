@@ -840,6 +840,19 @@ async function loadSettings() {
     $("set-aria2-conn").value = cfg.aria2_connections ?? 8;
     $("set-aria2-split").value = cfg.aria2_splits ?? 8;
     $("set-aria2-timeout").value = cfg.aria2_connect_timeout ?? 30;
+    $("set-aria2-cache").value = cfg.aria2_disk_cache ?? 64;
+    $("set-aria2-prealloc").checked = cfg.aria2_file_allocation !== "none";
+    $("set-aria2-minsplit").value = cfg.aria2_min_split_size ?? 4;
+    $("set-aria2-tries").value = cfg.aria2_max_tries ?? 3;
+    $("set-aria2-retrywait").value = cfg.aria2_retry_wait ?? 5;
+    $("set-aria2-slowlimit").value = cfg.aria2_lowest_speed_limit ?? 0;
+    $("set-aria2-btpeers").value = cfg.aria2_bt_max_peers ?? 128;
+    $("set-aria2-ua").value = cfg.aria2_user_agent || "";
+    $("set-ytdlp-quality").value = String(cfg.ytdlp_max_height ?? 0);
+    $("set-ytdlp-merge").value = cfg.ytdlp_merge_format || "mkv";
+    $("set-ytdlp-audio").value = cfg.ytdlp_audio_format || "mp3";
+    $("set-ytdlp-frags").value = cfg.ytdlp_fragments ?? 4;
+    $("set-ytdlp-embed-subs").checked = !!cfg.ytdlp_embed_subs;
   } catch (e) {
     notice(`cannot load settings: ${e}`, true);
   }
@@ -863,6 +876,19 @@ $("settings-form").addEventListener("submit", async (e) => {
     aria2_connections: Number($("set-aria2-conn").value) || undefined,
     aria2_splits: Number($("set-aria2-split").value) || undefined,
     aria2_connect_timeout: Number($("set-aria2-timeout").value) || undefined,
+    aria2_disk_cache: Number($("set-aria2-cache").value) || 0,
+    aria2_file_allocation: $("set-aria2-prealloc").checked ? "falloc" : "none",
+    aria2_min_split_size: Number($("set-aria2-minsplit").value) || undefined,
+    aria2_max_tries: Number($("set-aria2-tries").value) || 0,
+    aria2_retry_wait: Number($("set-aria2-retrywait").value) || 0,
+    aria2_lowest_speed_limit: Number($("set-aria2-slowlimit").value) || 0,
+    aria2_bt_max_peers: Number($("set-aria2-btpeers").value) || 0,
+    aria2_user_agent: $("set-aria2-ua").value.trim() || null,
+    ytdlp_max_height: Number($("set-ytdlp-quality").value) || 0,
+    ytdlp_merge_format: $("set-ytdlp-merge").value,
+    ytdlp_audio_format: $("set-ytdlp-audio").value,
+    ytdlp_fragments: Number($("set-ytdlp-frags").value) || undefined,
+    ytdlp_embed_subs: $("set-ytdlp-embed-subs").checked,
   };
   try {
     const res = await fetch("/api/config", {

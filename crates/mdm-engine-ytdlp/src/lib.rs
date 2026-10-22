@@ -375,17 +375,36 @@ fn build_args(job: &Job, offload: bool, cfg: &Config) -> Vec<String> {
     // dead hosts from hanging the job forever.
     if offload {
         let timeout = cfg.aria2_connect_timeout.clamp(5, 300);
+        let mut dl_args = format!(
+            "-x {} -s {} --connect-timeout {} --timeout {} --max-tries {} --retry-wait {} --console-log-level=warn",
+            cfg.aria2_connections.clamp(1, 16).max(1),
+            cfg.aria2_splits.clamp(1, 16).max(1),
+            timeout,
+            timeout.max(60),
+            cfg.aria2_max_tries.min(20),
+            cfg.aria2_retry_wait.min(60),
+        );
+        // Transfer-tuning from the aria2 card. The user agent is left alone:
+        // yt-dlp supplies its own headers/cookies for media URLs.
+        if cfg.aria2_disk_cache > 0 {
+            dl_args.push_str(&format!(" --disk-cache={}M", cfg.aria2_disk_cache.min(1024)));
+        }
+        dl_args.push_str(&format!(
+            " --min-split-size={}M --file-allocation={}",
+            cfg.aria2_min_split_size.clamp(1, 1024),
+            cfg.aria2_file_allocation,
+        ));
+        if cfg.aria2_lowest_speed_limit > 0 {
+            dl_args.push_str(&format!(
+                " --lowest-speed-limit={}K",
+                cfg.aria2_lowest_speed_limit.min(10240)
+            ));
+        }
         args.extend([
             "--external-downloader".into(),
             "aria2c".into(),
             "--external-downloader-args".into(),
-            format!(
-                "aria2c:-x {} -s {} --connect-timeout {} --timeout {} --max-tries 2 --console-log-level=warn",
-                cfg.aria2_connections.clamp(1, 16).max(1),
-                cfg.aria2_splits.clamp(1, 16).max(1),
-                timeout,
-                timeout.max(60),
-            ),
+            format!("aria2c:{dl_args}"),
         ]);
     }
 
@@ -404,6 +423,22 @@ fn build_args(job: &Job, offload: bool, cfg: &Config) -> Vec<String> {
         if cfg.embed_thumbnail {
             args.push("--embed-thumbnail".into());
         }
+        if cfg.ytdlp_embed_subs && (cfg.write_subtitles || cfg.write_auto_subs) {
+            args.push("--embed-subs".into());
+        }
+    }
+
+    // yt-dlp engine card: parallel native-downloader fragments and the
+    // merge container. Fragments only bite when the native downloader runs
+    // (aria2 fallback); the merger flag applies to split video+audio jobs.
+    if matches!(job.kind, mdm_core::JobKind::Video | mdm_core::JobKind::Audio) {
+        args.extend([
+            "--concurrent-fragments".into(),
+            cfg.ytdlp_fragments.clamp(1, 16).to_string(),
+        ]);
+    }
+    if job.kind == mdm_core::JobKind::Video && cfg.ytdlp_merge_format != "mkv" {
+        args.extend(["--merge-output-format".into(), cfg.ytdlp_merge_format.clone()]);
     }
 
     match job.kind {
@@ -412,6 +447,13 @@ fn build_args(job: &Job, offload: bool, cfg: &Config) -> Vec<String> {
             // recent releases.
             if job.format != "best" {
                 args.extend(["-f".into(), job.format.clone()]);
+            } else if cfg.ytdlp_max_height > 0 {
+                // Settings page quality cap applies to default "best" jobs.
+                let h = cfg.ytdlp_max_height.min(2160);
+                args.extend([
+                    "-f".into(),
+                    format!("bv*[height<={h}]+ba/b[height<={h}]/b"),
+                ]);
             }
         }
         mdm_core::JobKind::Audio => {
@@ -419,11 +461,16 @@ fn build_args(job: &Job, offload: bool, cfg: &Config) -> Vec<String> {
                 "-f".into(),
                 "bestaudio".into(),
                 "--extract-audio".into(),
-                "--audio-format".into(),
-                "mp3".into(),
-                "--audio-quality".into(),
-                "0".into(),
             ]);
+            let fmt = cfg.ytdlp_audio_format.as_str();
+            if !matches!(fmt, "best" | "original") {
+                args.extend([
+                    "--audio-format".into(),
+                    fmt.to_string(),
+                    "--audio-quality".into(),
+                    "0".into(),
+                ]);
+            }
         }
         // Direct/torrent kinds never route here in Phase 1.
         _ => {

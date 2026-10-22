@@ -37,7 +37,7 @@ impl Aria2Daemon {
         let out_dir = cfg.output_dir.display().to_string();
         let rpc_addr = format!("127.0.0.1:{port}");
 
-        let args: Vec<String> = vec![
+        let mut args: Vec<String> = vec![
             "--enable-rpc".into(),
             format!("--rpc-listen-port={port}"),
             format!("--rpc-secret={secret}"),
@@ -45,7 +45,6 @@ impl Aria2Daemon {
             "--continue=true".into(),
             "--always-resume=true".into(),
             "--auto-file-renaming=false".into(),
-            "--file-allocation=none".into(),
             format!("--save-session={}", session_file.display()),
             "--save-session-interval=30".into(),
             format!("--input-file={}", session_file.display()),
@@ -57,6 +56,27 @@ impl Aria2Daemon {
             "--bt-stop-timeout=0".into(),
             "--check-integrity=true".into(),
         ];
+
+        // Tunables from the aria2 settings card (modeled on P3TERX's
+        // aria2.conf): disk cache, preallocation, split sizing, retries,
+        // slow-connection cutoff, BT peers and UA masquerade.
+        if cfg.aria2_disk_cache > 0 {
+            args.push(format!("--disk-cache={}M", cfg.aria2_disk_cache.min(1024)));
+        }
+        args.push(format!("--file-allocation={}", cfg.aria2_file_allocation));
+        args.push(format!("--min-split-size={}M", cfg.aria2_min_split_size.clamp(1, 1024)));
+        args.push(format!("--max-tries={}", cfg.aria2_max_tries.min(20)));
+        args.push(format!("--retry-wait={}", cfg.aria2_retry_wait.min(60)));
+        if cfg.aria2_lowest_speed_limit > 0 {
+            args.push(format!(
+                "--lowest-speed-limit={}K",
+                cfg.aria2_lowest_speed_limit.min(10240)
+            ));
+        }
+        args.push(format!("--bt-max-peers={}", cfg.aria2_bt_max_peers.min(500)));
+        if !cfg.aria2_user_agent.trim().is_empty() {
+            args.push(format!("--user-agent={}", cfg.aria2_user_agent.trim()));
+        }
 
         let mut cmd = tokio::process::Command::new(&bin);
         cmd.args(&args).stdout(Stdio::null()).stderr(Stdio::null());

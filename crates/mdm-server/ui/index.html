@@ -287,6 +287,67 @@
             </div>
             <small class="field-note">Seconds before a stalled connection gives up. Applies to new downloads.</small>
           </label>
+          <label class="field">
+            <span>Disk cache</span>
+            <div class="stepper-row">
+              <button type="button" class="stbtn" data-target="set-aria2-cache" tabindex="-1">&#8722;</button>
+              <input id="set-aria2-cache" type="number" min="0" max="1024" step="32">
+              <button type="button" class="stbtn" data-target="set-aria2-cache" tabindex="-1">&#43;</button>
+            </div>
+            <small class="field-note">MB buffered in RAM before writing to disk. 64M helps slow drives; 0 = off.</small>
+          </label>
+          <label class="check"><input type="checkbox" id="set-aria2-prealloc"> <span>Pre-allocate file space (falloc)</span></label>
+          <small class="field-note">Fewer fragments on spinning HDDs. Leave off for SSDs.</small>
+          <label class="field">
+            <span>Min split size</span>
+            <div class="stepper-row">
+              <button type="button" class="stbtn" data-target="set-aria2-minsplit" tabindex="-1">&#8722;</button>
+              <input id="set-aria2-minsplit" type="number" min="1" max="1024" step="1">
+              <button type="button" class="stbtn" data-target="set-aria2-minsplit" tabindex="-1">&#43;</button>
+            </div>
+            <small class="field-note">MB. Files below this use a single connection; smaller = more segments.</small>
+          </label>
+          <label class="field">
+            <span>Retries per transfer</span>
+            <div class="stepper-row">
+              <button type="button" class="stbtn" data-target="set-aria2-tries" tabindex="-1">&#8722;</button>
+              <input id="set-aria2-tries" type="number" min="0" max="20" step="1">
+              <button type="button" class="stbtn" data-target="set-aria2-tries" tabindex="-1">&#43;</button>
+            </div>
+            <small class="field-note">0 = keep retrying. High values delay the automatic fallback.</small>
+          </label>
+          <label class="field">
+            <span>Retry wait</span>
+            <div class="stepper-row">
+              <button type="button" class="stbtn" data-target="set-aria2-retrywait" tabindex="-1">&#8722;</button>
+              <input id="set-aria2-retrywait" type="number" min="0" max="60" step="5">
+              <button type="button" class="stbtn" data-target="set-aria2-retrywait" tabindex="-1">&#43;</button>
+            </div>
+            <small class="field-note">Pause between retry attempts, in seconds.</small>
+          </label>
+          <label class="field">
+            <span>Slow speed limit</span>
+            <div class="stepper-row">
+              <button type="button" class="stbtn" data-target="set-aria2-slowlimit" tabindex="-1">&#8722;</button>
+              <input id="set-aria2-slowlimit" type="number" min="0" max="10240" step="64">
+              <button type="button" class="stbtn" data-target="set-aria2-slowlimit" tabindex="-1">&#43;</button>
+            </div>
+            <small class="field-note">K/s. Crawl-speed connections get dropped/reconnected. 0 = off.</small>
+          </label>
+          <label class="field">
+            <span>Max BT peers</span>
+            <div class="stepper-row">
+              <button type="button" class="stbtn" data-target="set-aria2-btpeers" tabindex="-1">&#8722;</button>
+              <input id="set-aria2-btpeers" type="number" min="0" max="500" step="16">
+              <button type="button" class="stbtn" data-target="set-aria2-btpeers" tabindex="-1">&#43;</button>
+            </div>
+            <small class="field-note">Peers connected per torrent. More is faster on popular seeds. 0 = unlimited.</small>
+          </label>
+          <label class="field wide">
+            <span>Browser user agent</span>
+            <input id="set-aria2-ua" type="text" spellcheck="false" placeholder="Mozilla/5.0 (Windows NT 10.0; ...)">
+            <small class="field-note">Masks aria2's fingerprint on direct downloads (some CDNs ban it). Empty = aria2 default.</small>
+          </label>
         </div>
         <div class="settings-card">
           <div class="card-head">
@@ -306,11 +367,63 @@
         </div>
         <div class="settings-card">
           <div class="card-head">
+            <svg viewBox="0 0 24 24" class="card-ico"><path d="M10 15V8l6-3v10m-6 4a3 3 0 1 1-6 0 3 3 0 0 1 6 0m6 0a3 3 0 1 1-6 0 3 3 0 0 1 6 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+            <h3>yt-dlp engine</h3>
+          </div>
+          <label class="field">
+            <span>Max video quality</span>
+            <select id="set-ytdlp-quality">
+              <option value="0">Best available</option>
+              <option value="2160">Up to 2160p (4K)</option>
+              <option value="1440">Up to 1440p (2K)</option>
+              <option value="1080">Up to 1080p (Full HD)</option>
+              <option value="720">Up to 720p (HD)</option>
+              <option value="480">Up to 480p</option>
+              <option value="360">Up to 360p</option>
+            </select>
+            <small class="field-note">Caps "best" jobs; never exceeds this height.</small>
+          </label>
+          <label class="field">
+            <span>Merge into container</span>
+            <select id="set-ytdlp-merge">
+              <option value="mkv">MKV (keeps any codecs)</option>
+              <option value="mp4">MP4</option>
+              <option value="webm">WebM</option>
+            </select>
+            <small class="field-note">Used when video + audio come as separate streams.</small>
+          </label>
+          <label class="field">
+            <span>Audio format</span>
+            <select id="set-ytdlp-audio">
+              <option value="mp3">MP3</option>
+              <option value="m4a">M4A (AAC)</option>
+              <option value="opus">Opus</option>
+              <option value="flac">FLAC (lossless)</option>
+              <option value="wav">WAV</option>
+              <option value="vorbis">Vorbis</option>
+              <option value="best">Original codec (no convert)</option>
+            </select>
+            <small class="field-note">Conversion target for audio jobs.</small>
+          </label>
+          <label class="field">
+            <span>Fragment downloads</span>
+            <div class="stepper-row">
+              <button type="button" class="stbtn" data-target="set-ytdlp-frags" tabindex="-1">&#8722;</button>
+              <input id="set-ytdlp-frags" type="number" min="1" max="16" step="1">
+              <button type="button" class="stbtn" data-target="set-ytdlp-frags" tabindex="-1">&#43;</button>
+            </div>
+            <small class="field-note">Parallel chunks yt-dlp's own downloader fetches — speeds up the aria2 fallback.</small>
+          </label>
+          <small class="field-note">Applies to new downloads. Embedding needs FFmpeg.</small>
+        </div>
+        <div class="settings-card">
+          <div class="card-head">
             <svg viewBox="0 0 24 24" class="card-ico"><path d="M21 3H3a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1ZM7 21h10M9 7v6m0 0 2 2m-2-2-2 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             <h3>Media extras</h3>
           </div>
           <label class="check"><input type="checkbox" id="set-write-subs"> <span>Download subtitles</span></label>
           <label class="check"><input type="checkbox" id="set-write-auto-subs"> <span>Include auto-generated captions</span></label>
+          <label class="check"><input type="checkbox" id="set-ytdlp-embed-subs"> <span>Embed subtitles into the file</span></label>
           <label class="check"><input type="checkbox" id="set-embed-metadata"> <span>Embed metadata &amp; chapters</span></label>
           <label class="check"><input type="checkbox" id="set-embed-thumbnail"> <span>Embed thumbnail as cover art</span></label>
           <small class="field-note">Defaults for video/audio (yt-dlp) downloads. Embedding needs FFmpeg.</small>

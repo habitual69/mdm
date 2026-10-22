@@ -191,6 +191,19 @@ struct ConfigUpdate {
     aria2_splits: Option<u32>,
     aria2_connect_timeout: Option<u32>,
     aria2_fallback: Option<bool>,
+    aria2_disk_cache: Option<u32>,
+    aria2_file_allocation: Option<String>,
+    aria2_min_split_size: Option<u32>,
+    aria2_max_tries: Option<u32>,
+    aria2_retry_wait: Option<u32>,
+    aria2_lowest_speed_limit: Option<u32>,
+    aria2_bt_max_peers: Option<u32>,
+    aria2_user_agent: Option<Option<String>>,
+    ytdlp_max_height: Option<u32>,
+    ytdlp_merge_format: Option<String>,
+    ytdlp_audio_format: Option<String>,
+    ytdlp_fragments: Option<u32>,
+    ytdlp_embed_subs: Option<bool>,
 }
 
 async fn get_config(State(st): State<AppState>) -> Json<mdm_core::Config> {
@@ -256,6 +269,56 @@ async fn put_config(
     }
     if let Some(v) = up.aria2_fallback {
         cfg.aria2_fallback = v;
+    }
+    if let Some(v) = up.aria2_disk_cache {
+        cfg.aria2_disk_cache = v.min(1024);
+    }
+    if let Some(v) = up.aria2_file_allocation {
+        let s = v.trim().to_ascii_lowercase();
+        if matches!(s.as_str(), "none" | "prealloc" | "trunc" | "falloc") {
+            cfg.aria2_file_allocation = s;
+        }
+    }
+    if let Some(v) = up.aria2_min_split_size {
+        cfg.aria2_min_split_size = v.clamp(1, 1024);
+    }
+    if let Some(v) = up.aria2_max_tries {
+        cfg.aria2_max_tries = v.min(20);
+    }
+    if let Some(v) = up.aria2_retry_wait {
+        cfg.aria2_retry_wait = v.min(60);
+    }
+    if let Some(v) = up.aria2_lowest_speed_limit {
+        cfg.aria2_lowest_speed_limit = v.min(10240);
+    }
+    if let Some(v) = up.aria2_bt_max_peers {
+        cfg.aria2_bt_max_peers = v.min(500);
+    }
+    if let Some(v) = up.aria2_user_agent {
+        cfg.aria2_user_agent = v.unwrap_or_default().trim().to_string();
+    }
+    if let Some(v) = up.ytdlp_max_height {
+        if matches!(v, 360 | 480 | 720 | 1080 | 1440 | 2160) || v == 0 {
+            cfg.ytdlp_max_height = v;
+        }
+    }
+    if let Some(v) = up.ytdlp_merge_format {
+        let s = v.trim().to_ascii_lowercase();
+        if matches!(s.as_str(), "mkv" | "mp4" | "webm") {
+            cfg.ytdlp_merge_format = s;
+        }
+    }
+    if let Some(v) = up.ytdlp_audio_format {
+        let s = v.trim().to_ascii_lowercase();
+        if matches!(s.as_str(), "mp3" | "m4a" | "opus" | "flac" | "wav" | "vorbis" | "best") {
+            cfg.ytdlp_audio_format = s;
+        }
+    }
+    if let Some(v) = up.ytdlp_fragments {
+        cfg.ytdlp_fragments = v.clamp(1, 16);
+    }
+    if let Some(v) = up.ytdlp_embed_subs {
+        cfg.ytdlp_embed_subs = v;
     }
     if let Some(dir) = up.output_dir {
         if dir.as_os_str().is_empty() {
