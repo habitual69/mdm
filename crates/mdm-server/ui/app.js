@@ -728,13 +728,31 @@ $("settings-form").addEventListener("submit", async (e) => {
     });
     if (res.ok) {
       cfgCache = await res.json();
-      notice("Settings saved");
+      const btn = $("settings-save");
+      const hint = $("settings-saved");
+      btn.textContent = "Saved";
+      hint.hidden = false;
+      setTimeout(() => { btn.textContent = "Save"; hint.hidden = true; }, 1800);
     } else {
       notice((await res.text()) || `error ${res.status}`, true);
     }
   } catch (err) {
     notice(`request failed: ${err}`, true);
   }
+});
+
+// stepper buttons next to numeric settings
+document.querySelectorAll(".step").forEach((b) => {
+  b.addEventListener("click", () => {
+    const input = $(b.dataset.target);
+    if (!input) return;
+    const min = Number(input.min ?? 0);
+    const max = Number(input.max ?? Number.MAX_SAFE_INTEGER);
+    const cur = Number(input.value) || 0;
+    const next = Math.min(max, Math.max(min, cur + Number(input.step || 1) * (b.textContent === "+" ? 1 : -1)));
+    input.value = next;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
 });
 
 // ---------- router ----------
