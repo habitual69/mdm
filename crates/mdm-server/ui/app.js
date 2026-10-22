@@ -36,6 +36,81 @@ const ACT_ICONS = {
   copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="4" y="4" width="12" height="12" rx="2.5"/><path d="M8.5 20h9a2.5 2.5 0 0 0 2.5-2.5v-9"/></svg>',
 };
 
+// Icons for concrete file types (extension-based).
+const FT_ICONS = {
+  video: KIND_ICONS.video,
+  audio: KIND_ICONS.audio,
+  torrent: KIND_ICONS.torrent,
+  image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="8.6" cy="9.2" r="1.7" fill="currentColor" stroke="none"/><path d="M4.5 16.8 9 12.6l3.2 3 2.6-2.5 4.7 4.4"/></svg>',
+  archive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="4.5" y="3.5" width="15" height="17" rx="2.5"/><path d="M9.5 3.5v3.4h5V3.5"/><path d="M4.5 14.5h15"/><path d="M12 17.5v2.8"/></svg>',
+  doc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5h7.2L18 8v12.5H6.5z"/><path d="M13.3 3.8v4.6h4.4"/><path d="M9.3 12.2h5.8M9.3 15.4h5.8"/></svg>',
+  iso: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.4"/><circle cx="12" cy="12" r="2.6"/><path d="M12 6.7a5.3 5.3 0 0 1 5.3 5.3"/></svg>',
+  sub: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M6.8 13.4h6.4M6.8 16.2h4.2M14.8 16.2h2.4"/></svg>',
+  app: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4.6 9h14.8"/><circle cx="7.6" cy="6.6" r="1" fill="currentColor" stroke="none"/><circle cx="10.6" cy="6.6" r="1" fill="currentColor" stroke="none"/></svg>',
+  ext: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h6.6L18.2 8v12.5H7z"/><path d="M13.2 3.8v4.7h4.5"/></svg>',
+};
+
+// extension -> file-type icon key
+const EXT_KIND = new Map([
+  ["mp4", "video"], ["mkv", "video"], ["webm", "video"], ["avi", "video"],
+  ["mov", "video"], ["m4v", "video"], ["ts", "video"], ["wmv", "video"],
+  ["flv", "video"], ["mpg", "video"], ["mpeg", "video"], ["3gp", "video"],
+  ["mp3", "audio"], ["flac", "audio"], ["wav", "audio"], ["ogg", "audio"],
+  ["opus", "audio"], ["m4a", "audio"], ["aac", "audio"], ["wma", "audio"],
+  ["jpg", "image"], ["jpeg", "image"], ["png", "image"], ["gif", "image"],
+  ["webp", "image"], ["bmp", "image"], ["avif", "image"], ["heic", "image"],
+  ["tiff", "image"], ["psd", "image"],
+  ["zip", "archive"], ["rar", "archive"], ["7z", "archive"], ["tar", "archive"],
+  ["gz", "archive"], ["xz", "archive"], ["bz2", "archive"], ["zst", "archive"],
+  ["tgz", "archive"], ["cab", "archive"],
+  ["pdf", "doc"], ["doc", "doc"], ["docx", "doc"], ["rtf", "doc"], ["txt", "doc"],
+  ["md", "doc"], ["epub", "doc"], ["mobi", "doc"], ["csv", "doc"], ["xls", "doc"],
+  ["xlsx", "doc"], ["ppt", "doc"], ["pptx", "doc"], ["odt", "doc"],
+  ["iso", "iso"], ["img", "iso"], ["cue", "iso"], ["bin", "iso"], ["mds", "iso"],
+  ["vhd", "iso"], ["vdi", "iso"], ["vmdk", "iso"],
+  ["srt", "sub"], ["ass", "sub"], ["ssa", "sub"], ["sub", "sub"], ["vtt", "sub"],
+  ["sbv", "sub"],
+  ["torrent", "torrent"],
+  ["exe", "app"], ["msi", "app"], ["appimage", "app"], ["deb", "app"],
+  ["rpm", "app"], ["dmg", "app"], ["apk", "app"], ["flatpak", "app"],
+]);
+
+function extOf(s) {
+  s = String(s || "").trim();
+  if (!s) return "";
+  try {
+    const u = new URL(s);
+    // Only the path carries a real extension; "https://example.io" must not
+    // read like a .io file.
+    if (/^(https?|ftp):$/.test(u.protocol)) s = u.pathname;
+  } catch {
+    // not an absolute URL — treat the string as a filename/path.
+  }
+  const m = s.split(/[?#]/)[0].match(/\.([a-z0-9]{1,8})$/i);
+  return m ? m[1].toLowerCase() : "";
+}
+
+// Icon for a single file name / path (picker rows, saved files).
+function fileIcon(name) {
+  return FT_ICONS[EXT_KIND.get(extOf(name)) || "ext"] || FT_ICONS.ext;
+}
+
+// Icon for a whole download: torrent/magnet keep their glyphs; media kinds
+// stay video/audio unless the URL points at a distinct file type (a .zip
+// link must not render as a film frame).
+function jobIcon(job) {
+  if (!job) return KIND_ICONS.generic;
+  if (job.kind === "magnet") return KIND_ICONS.magnet;
+  if (job.kind === "torrent") return KIND_ICONS.torrent;
+  const ext = extOf(job.url) || extOf(job.title) || extOf(job.output_path);
+  if (ext) {
+    const k = EXT_KIND.get(ext);
+    if (k && FT_ICONS[k]) return FT_ICONS[k];
+  }
+  if (job.kind === "video" || job.kind === "audio") return KIND_ICONS[job.kind];
+  return KIND_ICONS.direct;
+}
+
 const jobs = new Map();   // id -> job (latest)
 const cards = new Map();  // id -> { el, refs }
 let kindFilter = null;    // null | 'video'|'audio'|'torrents'|'files'
@@ -82,7 +157,7 @@ function thumb(kind, job) {
     box.appendChild(img);
   }
   if (!srcs.length || srcs[0]) {
-    const ic = icon(KIND_ICONS[job.kind] || KIND_ICONS.generic);
+    const ic = icon(jobIcon(job));
     ic.classList.add("thumb-fallback");
     box.appendChild(ic);
   }
@@ -523,6 +598,7 @@ function renderTorrentFiles() {
     cb.checked = true;
     cb.dataset.idx = String(i + 1);
     row.appendChild(cb);
+    row.appendChild(icon(fileIcon(f.name)));
     row.appendChild(mk("span", "t-name", f.name || `file ${i + 1}`));
     row.appendChild(mk("span", "t-size", fmtBytes(f.size)));
     fileSel.add(i + 1);
