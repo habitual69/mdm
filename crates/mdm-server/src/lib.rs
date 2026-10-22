@@ -33,6 +33,7 @@ pub fn router(q: Arc<Queue>) -> Router {
         .route("/static/{*path}", get(ui_static))
         .route("/api/health", get(health))
         .route("/api/config", get(get_config).put(put_config))
+        .route("/api/torrent-info", post(torrent_info))
         .route("/api/jobs", post(add_job).get(list_jobs))
         .route("/api/jobs/{id}", get(get_job).delete(delete_job))
         .route("/api/jobs/{id}/pause", post(pause_job))
@@ -94,6 +95,26 @@ pub async fn serve_with_shutdown(
 }
 
 // --- download settings ------------------------------------------------------
+
+#[derive(Debug, Clone, serde::Deserialize)]
+struct TorrentInfoReq {
+    path: String,
+}
+
+async fn torrent_info(
+    Json(req): Json<TorrentInfoReq>,
+) -> Result<Json<mdm_engine_aria2::TorrentInfo>, (StatusCode, String)> {
+    let p = std::path::PathBuf::from(req.path.trim());
+    if !p.is_file() {
+        return Err((StatusCode::BAD_REQUEST, format!("not a file: {}", p.display())));
+    }
+    if p.extension().and_then(|e| e.to_str()) != Some("torrent") {
+        return Err((StatusCode::BAD_REQUEST, "not a .torrent file".into()));
+    }
+    mdm_engine_aria2::torrent_info(&p)
+        .map(Json)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))
+}
 
 #[derive(Debug, Clone, serde::Deserialize)]
 struct ConfigUpdate {

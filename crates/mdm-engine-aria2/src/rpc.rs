@@ -102,11 +102,18 @@ impl Aria2Rpc {
         Ok(gid)
     }
 
-    pub async fn add_torrent(&self, torrent_b64: &str, dir: &str) -> Result<String, RpcError> {
+    pub async fn add_torrent(
+        &self,
+        torrent_b64: &str,
+        dir: &str,
+        extra_opts: Value,
+    ) -> Result<String, RpcError> {
+        let mut opts = extra_opts;
+        opts["dir"] = json!(dir);
         let gid = self
             .call(
                 "aria2.addTorrent",
-                vec![json!(torrent_b64), json!(Vec::<String>::new()), json!({ "dir": dir })],
+                vec![json!(torrent_b64), json!(Vec::<String>::new()), opts],
             )
             .await?
             .as_str()

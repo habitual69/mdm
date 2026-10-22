@@ -92,13 +92,27 @@
         <form id="add-form" class="home-stack" autocomplete="off">
           <div class="paste-bar">
             <span class="plus">+</span>
-            <input id="url" type="text" placeholder="Paste a link — video, torrent or magnet…" required spellcheck="false" aria-label="Link">
+            <input id="url" type="text" placeholder="Paste a link, magnet or .torrent path…" required spellcheck="false" aria-label="Link">
+            <button type="button" id="clear-btn" class="kbd-btn hidden" title="Clear">×</button>
             <button type="button" id="paste-btn" class="kbd-btn"><kbd>Ctrl+V</kbd></button>
           </div>
 
           <!-- shown while a URL is present -->
           <div id="add-card" class="add-card hidden">
             <div id="preview-line" class="preview-line"><b id="pv-site">YouTube</b> <span class="dotsep">·</span> <span id="pv-type">Video</span></div>
+
+            <!-- torrent: per-file selection -->
+            <div id="torrent-block" class="torrent-block hidden">
+              <div class="t-head">
+                <b id="t-count">1 of 1 files</b>
+                <span class="t-links">
+                  <button type="button" id="t-all">Select all</button>
+                  <button type="button" id="t-none">None</button>
+                </span>
+              </div>
+              <div id="t-files" class="t-files"></div>
+            </div>
+
             <button type="submit" id="add-btn" class="primary wide-btn">Download video</button>
 
             <details class="advance" open>
@@ -168,6 +182,7 @@
         <button class="chip" data-state="done">Completed <b class="chip-n" id="n-done">0</b></button>
         <button class="chip" data-state="failed">Failed <b class="chip-n" id="n-failed">0</b></button>
       </div>
+      <div id="dl-summary" class="dl-summary hidden"></div>
       <div id="kind-note" class="kind-note hidden"></div>
 
       <div id="cards" class="cards"></div>

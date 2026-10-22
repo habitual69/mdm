@@ -21,6 +21,9 @@ pub struct NewJobReq {
     pub kind: Option<JobKind>,
     /// Engine format selector (yt-dlp `-f`), default "best".
     pub format: Option<String>,
+    /// Torrent file selection (1-based indices into the .torrent metadata).
+    #[serde(default)]
+    pub select_files: Option<Vec<i64>>,
     /// Overrides cfg.output_dir.
     pub output_dir: Option<PathBuf>,
 }
@@ -116,12 +119,13 @@ impl Queue {
         }
         let kind = req.kind.unwrap_or_else(|| JobKind::detect(&req.url));
         let cfg = self.inner.cfg.read().unwrap();
-        let job = Job::new(
+        let mut job = Job::new(
             req.url.trim(),
             kind,
             req.output_dir.unwrap_or_else(|| cfg.output_dir.clone()),
             req.format.unwrap_or_else(|| "best".into()),
         );
+        job.select_files = req.select_files.clone().filter(|l| !l.is_empty());
         self.inner.db.insert_job(&job)?;
         let _ = self.inner.events.send(Event::JobUpdated { job: Box::new(job.clone()) });
         let _ = self.inner.cmd_tx.send(Cmd::Wake);

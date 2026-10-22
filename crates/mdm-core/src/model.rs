@@ -139,6 +139,9 @@ pub struct Job {
     #[serde(default)]
     pub output_path: Option<PathBuf>,
     pub format: String,
+    /// Torrent file selection (1-based indices), when the user picked files.
+    #[serde(default)]
+    pub select_files: Option<Vec<i64>>,
     pub progress: f32,
     #[serde(default)]
     pub downloaded_bytes: Option<i64>,
@@ -174,6 +177,7 @@ impl Job {
             output_dir,
             output_path: None,
             format,
+            select_files: None,
             progress: 0.0,
             downloaded_bytes: None,
             total_bytes: None,

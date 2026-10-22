@@ -14,8 +14,11 @@ use mdm_core::{
 use serde_json::{json, Value};
 use tracing::warn;
 
+pub mod torrent;
+
 pub use daemon::{Aria2Daemon, DaemonHandle};
 pub use rpc::RpcError;
+pub use torrent::{TorrentInfo, torrent_info};
 
 pub struct Aria2Engine {
     pub daemon: DaemonHandle,
@@ -39,20 +42,32 @@ impl Aria2Engine {
                     let bytes = std::fs::read(&path)
                         .map_err(|e| JobError::Fatal(format!("read torrent: {e}")))?;
                     let b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
-                    rpc.add_torrent(&b64, &dir).await
+                    rpc.add_torrent(&b64, &dir, select_file_opts(&job)).await
                 } else {
-                    rpc.add_uri(vec![job.url.clone()], &dir, json!({})).await
+                    rpc.add_uri(vec![job.url.clone()], &dir, select_file_opts(&job)).await
                 }
             }
             mdm_core::JobKind::Direct | mdm_core::JobKind::Magnet => {
-                rpc.add_uri(vec![job.url.clone()], &dir, json!({})).await
+                rpc.add_uri(vec![job.url.clone()], &dir, select_file_opts(&job)).await
             }
             // Video/audio never route here in Phase 1.
             _ => rpc.add_uri(vec![job.url.clone()], &dir, json!({})).await,
         };
         gid.map_err(map_rpc_err)
     }
+}
 
+/// aria2 selects files by 1-based index: `select-file=3,7`.
+fn select_file_opts(job: &mdm_core::Job) -> serde_json::Value {
+    match &job.select_files {
+        Some(list) if !list.is_empty() => json!({
+            "select-file": list.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(",")
+        }),
+        _ => json!({}),
+    }
+}
+
+impl Aria2Engine {
     async fn reattach_or_add(&self, job: &Job) -> std::result::Result<String, JobError> {
         let daemon = self.daemon.get().await.map_err(|e| JobError::Fatal(e.to_string()))?;
         let rpc = rpc::Aria2Rpc::new(daemon.rpc_addr.clone(), daemon.secret.clone());

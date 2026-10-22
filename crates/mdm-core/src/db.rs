@@ -15,7 +15,7 @@ pub struct Db {
 
 const COLUMNS: &str = "id, parent_id, url, kind, engine, state, title, output_dir, output_path, \
      format, progress, downloaded_bytes, total_bytes, speed_bps, eta_sec, external_id, \
-     error, retries, retry_at, created_at, updated_at";
+     error, retries, retry_at, created_at, updated_at, select_files";
 
 impl Db {
     pub fn open(path: &Path) -> Result<Db> {
@@ -26,6 +26,17 @@ impl Db {
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.busy_timeout(std::time::Duration::from_secs(5))?;
         conn.execute_batch(SCHEMA)?;
+        // Tiny migration: add select_files when upgrading an older queue db.
+        let has_select: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM pragma_table_info('jobs') WHERE name='select_files'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(1);
+        if has_select == 0 {
+            let _ = conn.execute("ALTER TABLE jobs ADD COLUMN select_files TEXT", []);
+        }
         Ok(Db { conn: Mutex::new(conn) })
     }
 
@@ -54,8 +65,8 @@ impl Db {
             c.execute(
                 "INSERT INTO jobs (id, parent_id, url, kind, engine, state, title, output_dir, \
                  output_path, format, progress, downloaded_bytes, total_bytes, speed_bps, eta_sec, \
-                 external_id, error, retries, retry_at, created_at, updated_at) \
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21)",
+                 external_id, error, retries, retry_at, created_at, updated_at, select_files) \
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22)",
                 params![
                     job.id,
                     job.parent_id,
@@ -78,6 +89,7 @@ impl Db {
                     job.retry_at,
                     job.created_at.timestamp_millis(),
                     job.updated_at.timestamp_millis(),
+                    job.select_files.as_ref().map(|l| serde_json::to_string(l).unwrap_or_default()),
                 ],
             )
             .map(|_n| ())
@@ -114,6 +126,9 @@ impl Db {
             retry_at: r.get("retry_at")?,
             created_at: dt_from_millis(created),
             updated_at: dt_from_millis(updated),
+            select_files: r
+                .get::<_, Option<String>>("select_files")?
+                .and_then(|s| serde_json::from_str::<Vec<i64>>(&s).ok()),
         })
     }
 
@@ -336,7 +351,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     retries INTEGER NOT NULL DEFAULT 0,
     retry_at INTEGER,
     created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
+    updated_at INTEGER NOT NULL,
+    select_files TEXT
 );
 CREATE INDEX IF NOT EXISTS jobs_state_idx ON jobs(state);
 CREATE INDEX IF NOT EXISTS jobs_created_idx ON jobs(created_at);

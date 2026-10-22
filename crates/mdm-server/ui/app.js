@@ -44,6 +44,51 @@ let searchQuery = "";
 let qualityFmt = "";      // quality segment format value
 let cfgCache = null;      // last known config
 
+// thumbnail sources; the <img> falls back to the kind icon on error.
+function ytId(url) {
+  const m = String(url).match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{6,15})/);
+  return m ? m[1] : null;
+}
+
+function thumbSrcs(job) {
+  const out = [];
+  const host = safeHost(job.url);
+  if (job.kind === "video" || job.kind === "audio") {
+    const id = ytId(job.url);
+    if (id) out.push(`https://i.ytimg.com/vi/${id}/mqdefault.jpg`);
+    if (host) out.push(`https://icons.duckduckgo.com/ip3/${host}.ico`);
+  } else if (job.kind === "direct") {
+    if (host) out.push(`https://icons.duckduckgo.com/ip3/${host}.ico`);
+  }
+  return out;
+}
+
+function thumb(kind, job) {
+  const box = mk("div", "thumb");
+  const srcs = job ? thumbSrcs(job) : [];
+  if (srcs.length) {
+    const img = mk("img", "thumb-img");
+    let i = 0;
+    img.src = srcs[0];
+    img.referrerPolicy = "no-referrer";
+    img.loading = "lazy";
+    img.alt = "";
+    img.addEventListener("load", () => box.classList.add("filled"));
+    img.onerror = () => {
+      i += 1;
+      if (i < srcs.length) img.src = srcs[i];
+      else img.remove();
+    };
+    box.appendChild(img);
+  }
+  if (!srcs.length || srcs[0]) {
+    const ic = icon(KIND_ICONS[job.kind] || KIND_ICONS.generic);
+    ic.classList.add("thumb-fallback");
+    box.appendChild(ic);
+  }
+  return box;
+}
+
 // ---------- tiny helpers ----------
 
 function fmtBytes(n) {
@@ -63,6 +108,19 @@ function fmtSpeed(bps) {
 
 function fmtPct(p) {
   return `${Math.min(100, Math.max(0, p)).toFixed(0)}%`;
+}
+
+function fmtElapsed(sec) {
+  const s = Math.floor(sec);
+  if (s >= 3600) return `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  return `${Math.floor(s / 60)}.${String(s % 60).padStart(2, "0")}`;
+}
+
+const seenRunning = new Map(); // id -> started-at ms (this page load)
+
+function elapsedSec(job) {
+  const s = seenRunning.get(job.id);
+  return s ? Math.max(0, (Date.now() - s) / 1000) : 0;
 }
 
 function basename(path) {
@@ -137,9 +195,9 @@ function icon(html) {
 
 function buildCard(job) {
   const el = mk("div", "job-card");
+  el.dataset.g = "";
 
-  const thumb = mk("div", "thumb");
-  thumb.appendChild(icon(KIND_ICONS[job.kind] || KIND_ICONS.generic));
+  const thumbEl = thumb(job.kind, job);
 
   const main = mk("div", "job-main");
 
@@ -195,11 +253,10 @@ function buildCard(job) {
   main.appendChild(stepper);
   main.appendChild(barRow);
   main.appendChild(note);
-  el.appendChild(thumb);
+  el.appendChild(thumbEl);
   el.appendChild(main);
-  el.dataset.g = "";
 
-  return { el, refs: { link, title, pill, acts, sizeC, bar, fill, pct, note, stepper, steps, stage, meta } };
+  return { el, refs: { link, title, pill, acts, sizeC, bar, fill, pct, note, stepper, steps, stage, meta }, lastThumb: "" };
 }
 
 function setAction(refs, job) {
@@ -253,6 +310,13 @@ function renderCard(job) {
   }
   const r = c.refs;
 
+  // thumbnail refresh (yt/favicons) only when kind/url actually changed
+  const tKey = `${job.kind}|${thumbSrcs(job).join("|")}`;
+  if (c.lastThumb !== tKey) {
+    c.lastThumb = tKey;
+    c.el.firstElementChild.replaceWith(thumb(job.kind, job));
+  }
+
   r.link.textContent = displayName(job);
   r.title.title = displayName(job);
   r.pill.textContent = job.state;
@@ -271,9 +335,17 @@ function renderCard(job) {
       s.classList.toggle("on", s.dataset.step === (job.state === "queued" ? "queue" : "download"));
       s.classList.toggle("past", s.dataset.step === "queue" && job.state === "running");
     }
-    r.stage.textContent = job.kind === "video" || job.kind === "audio"
-      ? (job.progress > 0 ? "running… " : "starting engine…")
-      : "downloading…";
+    const activeStage = job.kind === "video" || job.kind === "audio"
+      ? (job.progress > 0 ? "Running…" : "Starting engine…")
+      : "Downloading";
+    r.stage.textContent = activeStage;
+  }
+
+  // running-elapsed bookkeeping
+  if (job.state === "running") {
+    if (!seenRunning.has(job.id)) seenRunning.set(job.id, Date.now());
+  } else {
+    seenRunning.delete(job.id);
   }
 
   // bar
@@ -287,6 +359,9 @@ function renderCard(job) {
     r.note.textContent = job.error;
     r.note.className = "job-note mono bad";
     r.note.title = job.error;
+  } else if (job.state === "running") {
+    r.note.textContent = `· ${fmtElapsed(elapsedSec(job))} elapsed`;
+    r.note.className = "job-note";
   } else if (job.state === "done" && job.output_path) {
     r.note.textContent = job.output_path;
     r.note.className = "job-note mono";
@@ -389,6 +464,14 @@ function sync() {
     ? "Nothing here yet — add a link from Home."
     : "No downloads match this filter.";
 
+  // header summary
+  const saved = list
+    .filter(j => j.state === "done")
+    .reduce((a, j) => a + (j.downloaded_bytes || j.total_bytes || 0), 0);
+  const summary = $("dl-summary");
+  summary.classList.toggle("hidden", list.length === 0);
+  summary.textContent = `${list.length} download${list.length === 1 ? "" : "s"} · ${fmtBytes(saved)} saved`;
+
   // footer
   const footer = $("dl-footer");
   if (running.length) {
@@ -404,21 +487,116 @@ function sync() {
   }
 }
 
+// ---------- torrent preview ----------
+
+let curTorrentInfo = null;
+let fileSel = new Set();
+const torrentInfoCache = new Map(); // path -> Promise<info|null>
+
+function loadTorrentInfo(path) {
+  if (!torrentInfoCache.has(path)) {
+    torrentInfoCache.set(
+      path,
+      fetch("/api/torrent-info", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ path }),
+      }).then(r => (r.ok ? r.json() : null)),
+    );
+  }
+  return torrentInfoCache.get(path);
+}
+
+function renderTorrentFiles() {
+  const box = $("t-files");
+  box.replaceChildren();
+  fileSel.clear();
+  if (!curTorrentInfo) {
+    $("torrent-block").classList.add("hidden");
+    return;
+  }
+  $("torrent-block").classList.remove("hidden");
+  curTorrentInfo.files.forEach((f, i) => {
+    const row = mk("label", "t-row");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = true;
+    cb.dataset.idx = String(i + 1);
+    row.appendChild(cb);
+    row.appendChild(mk("span", "t-name", f.name || `file ${i + 1}`));
+    row.appendChild(mk("span", "t-size", fmtBytes(f.size)));
+    fileSel.add(i + 1);
+    box.appendChild(row);
+  });
+  updateTorrentCounts();
+}
+
+function updateTorrentCounts() {
+  if (!curTorrentInfo) return;
+  const total = curTorrentInfo.files.length;
+  $("t-count").textContent = `${fileSel.size} of ${total} file${total === 1 ? "" : "s"}`;
+  const kindLabel = "torrent";
+  $("add-btn").textContent =
+    fileSel.size === total ? `Download ${total} file${total === 1 ? "" : "s"}`
+      : fileSel.size === 0 ? "Add torrent (no files selected)"
+      : `Download ${fileSel.size} file${fileSel.size === 1 ? "" : "s"}`;
+  void kindLabel;
+}
+
+$("t-files").addEventListener("change", (e) => {
+  const cb = e.target.closest("input[type=checkbox]");
+  if (!cb) return;
+  const idx = Number(cb.dataset.idx);
+  if (cb.checked) fileSel.add(idx);
+  else fileSel.delete(idx);
+  updateTorrentCounts();
+});
+$("t-all").addEventListener("click", () => {
+  for (const cb of $("t-files").querySelectorAll("input[type=checkbox]")) {
+    cb.checked = true;
+    fileSel.add(Number(cb.dataset.idx));
+  }
+  updateTorrentCounts();
+});
+$("t-none").addEventListener("click", () => {
+  for (const cb of $("t-files").querySelectorAll("input[type=checkbox]")) {
+    cb.checked = false;
+  }
+  fileSel.clear();
+  updateTorrentCounts();
+});
+
 // ---------- add card (home) ----------
 
 function refreshPreview() {
   const url = $("url").value.trim();
   const hasUrl = url.length > 0;
+  $("clear-btn").classList.toggle("hidden", !hasUrl);
   document.querySelector(".hero").classList.toggle("focused", hasUrl);
   $("add-card").classList.toggle("hidden", !hasUrl);
+  curTorrentInfo = null;
+  fileSel.clear();
+  $("torrent-block").classList.toggle("hidden", true);
   if (!hasUrl) return;
-  const kind = $("kind").value || detectKind(url);
+
+  const isTorrentPath = /\.torrent$/i.test(url.split("?")[0]);
+  const kind = isTorrentPath ? "torrent" : ($("kind").value || detectKind(url));
   $("pv-site").textContent =
     kind === "magnet" ? "Magnet link"
-    : kind === "torrent" ? "Torrent file"
+    : kind === "torrent" ? "BitTorrent"
     : (siteLabel({ kind, url }) || "Link");
   $("pv-type").textContent = { video: "Video", audio: "Audio", direct: "File", torrent: "Torrent", magnet: "Magnet" }[kind];
   $("add-btn").textContent = `Download ${{ video: "video", audio: "audio", direct: "file", torrent: "torrent", magnet: "magnet" }[kind]}`;
+
+  if (kind === "torrent" && (url.startsWith("/") || url.startsWith("~"))) {
+    loadTorrentInfo(url).then(info => {
+      // ignore stale responses after path changed
+      if (info && $("url").value.trim() === url) {
+        curTorrentInfo = info;
+        renderTorrentFiles();
+      }
+    });
+  }
 }
 
 function loadOutDir() {
@@ -429,8 +607,9 @@ function loadOutDir() {
 }
 
 $("url").addEventListener("input", refreshPreview);
-$("url").addEventListener("focus", () => document.querySelector(".hero").classList.add("focused"));
 $("kind").addEventListener("change", refreshPreview);
+$("url").addEventListener("keydown", (e) => { if (e.key === "Escape") { $("url").value = ""; refreshPreview(); } });
+$("clear-btn").addEventListener("click", () => { $("url").value = ""; $("url").focus(); refreshPreview(); });
 $("quality-seg").addEventListener("click", (e) => {
   const b = e.target.closest(".seg-btn");
   if (!b) return;
@@ -487,6 +666,12 @@ $("add-form").addEventListener("submit", async (e) => {
   if (!url) return;
   const kind = $("kind").value;
   const format = ($("format").value.trim() || qualityFmt) || undefined;
+  const body = { url };
+  if (kind) body.kind = kind;
+  if (format) body.format = format;
+  if (curTorrentInfo && fileSel.size > 0 && fileSel.size < curTorrentInfo.files.length) {
+    body.select_files = [...fileSel].sort((a, b) => a - b);
+  }
   const btn = $("add-btn");
   btn.disabled = true;
   try {
@@ -691,6 +876,14 @@ window.addEventListener("keydown", (e) => {
 window.addEventListener("hashchange", applyRoute);
 
 // ---------- start ----------
+
+setInterval(() => {
+  for (const [id, job] of jobs) {
+    if (job.state !== "running") continue;
+    const c = cards.get(id);
+    if (c) c.refs.note.textContent = `· ${fmtElapsed(elapsedSec(job))} elapsed`;
+  }
+}, 1000);
 
 async function refreshInitial() {
   try {

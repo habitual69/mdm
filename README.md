@@ -49,6 +49,8 @@ curl -s -X POST localhost:5757/api/jobs -H 'content-type: application/json' \
      -d '{"url":"magnet:?xt=...","kind":"magnet"}'
 curl -s localhost:5757/api/jobs
 curl -s localhost:5757/api/config          # GET/PUT download settings
+curl -s localhost:5757/api/torrent-info -H 'content-type: application/json' \
+     -d '{"path":"/path/to/x.torrent"}'    # file list for selective download
 ```
 
 ## Roadmap
