@@ -29,7 +29,7 @@ impl Aria2Engine {
         Aria2Engine { daemon: DaemonHandle::new(cfg, data_dir) }
     }
 
-    async fn add_job(&self, job: &Job) -> std::result::Result<String, JobError> {
+    async fn add_job(&self, job: &Job, cfg: &Config) -> std::result::Result<String, JobError> {
         let daemon = self.daemon.get().await.map_err(|e| JobError::Fatal(e.to_string()))?;
         let rpc = rpc::Aria2Rpc::new(daemon.rpc_addr.clone(), daemon.secret.clone());
         let dir = job.output_dir.display().to_string();
@@ -42,33 +42,49 @@ impl Aria2Engine {
                     let bytes = std::fs::read(&path)
                         .map_err(|e| JobError::Fatal(format!("read torrent: {e}")))?;
                     let b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
-                    rpc.add_torrent(&b64, &dir, select_file_opts(&job)).await
+                    rpc.add_torrent(&b64, &dir, select_file_opts(job, cfg)).await
                 } else {
-                    rpc.add_uri(vec![job.url.clone()], &dir, select_file_opts(&job)).await
+                    rpc.add_uri(vec![job.url.clone()], &dir, select_file_opts(job, cfg)).await
                 }
             }
             mdm_core::JobKind::Direct | mdm_core::JobKind::Magnet => {
-                rpc.add_uri(vec![job.url.clone()], &dir, select_file_opts(&job)).await
+                rpc.add_uri(vec![job.url.clone()], &dir, select_file_opts(job, cfg)).await
             }
             // Video/audio never route here in Phase 1.
-            _ => rpc.add_uri(vec![job.url.clone()], &dir, json!({})).await,
+            _ => rpc.add_uri(vec![job.url.clone()], &dir, select_file_opts(job, cfg)).await,
         };
         gid.map_err(map_rpc_err)
     }
 }
 
-/// aria2 selects files by 1-based index: `select-file=3,7`.
-fn select_file_opts(job: &mdm_core::Job) -> serde_json::Value {
-    match &job.select_files {
+/// aria2 selects files by 1-based index (`select-file=3,7`), and carries the
+/// per-download network knobs from settings (connections, splits, timeouts).
+fn select_file_opts(job: &mdm_core::Job, cfg: &Config) -> serde_json::Value {
+    let mut opts = match &job.select_files {
         Some(list) if !list.is_empty() => json!({
             "select-file": list.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(",")
         }),
         _ => json!({}),
+    };
+    if let Some(obj) = opts.as_object_mut() {
+        obj.insert(
+            "max-connection-per-server".into(),
+            json!(cfg.aria2_connections.clamp(1, 16).to_string()),
+        );
+        obj.insert(
+            "split".into(),
+            json!(cfg.aria2_splits.clamp(1, 16).to_string()),
+        );
+        obj.insert(
+            "connect-timeout".into(),
+            json!(cfg.aria2_connect_timeout.clamp(5, 300).to_string()),
+        );
     }
+    opts
 }
 
 impl Aria2Engine {
-    async fn reattach_or_add(&self, job: &Job) -> std::result::Result<String, JobError> {
+    async fn reattach_or_add(&self, job: &Job, cfg: &Config) -> std::result::Result<String, JobError> {
         let daemon = self.daemon.get().await.map_err(|e| JobError::Fatal(e.to_string()))?;
         let rpc = rpc::Aria2Rpc::new(daemon.rpc_addr.clone(), daemon.secret.clone());
 
@@ -95,7 +111,7 @@ impl Aria2Engine {
                 }
             }
         }
-        self.add_job(job).await
+        self.add_job(job, cfg).await
     }
 }
 
@@ -182,7 +198,7 @@ impl Engine for Aria2Engine {
             }
         }
 
-        let gid = self.reattach_or_add(&job).await?;
+        let gid = self.reattach_or_add(&job, &ctx.cfg).await?;
 
         // Persist our tracking gid early so a crash keeps the linkage.
         ctx.send_patch(

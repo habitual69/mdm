@@ -256,6 +256,39 @@
         </div>
         <div class="settings-card">
           <div class="card-head">
+            <svg viewBox="0 0 24 24" class="card-ico"><path d="M12 3v10m0 0 4-4m-4 4-4-4M4 17.5h16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <h3>aria2 engine</h3>
+          </div>
+          <label class="check"><input type="checkbox" id="set-aria2-offload"> <span>Offload yt-dlp downloads to aria2c</span></label>
+          <small class="field-note">Aria2 fetches media with segmented, multi-connection reads. Faster on big files and keeps yt-dlp light.</small>
+          <label class="field">
+            <span>Connections per server</span>
+            <div class="stepper-row">
+              <button type="button" class="stbtn" data-target="set-aria2-conn" tabindex="-1">&#8722;</button>
+              <input id="set-aria2-conn" type="number" min="1" max="16" step="1">
+              <button type="button" class="stbtn" data-target="set-aria2-conn" tabindex="-1">&#43;</button>
+            </div>
+          </label>
+          <label class="field">
+            <span>Segments per download</span>
+            <div class="stepper-row">
+              <button type="button" class="stbtn" data-target="set-aria2-split" tabindex="-1">&#8722;</button>
+              <input id="set-aria2-split" type="number" min="1" max="16" step="1">
+              <button type="button" class="stbtn" data-target="set-aria2-split" tabindex="-1">&#43;</button>
+            </div>
+          </label>
+          <label class="field">
+            <span>Connect timeout</span>
+            <div class="stepper-row">
+              <button type="button" class="stbtn" data-target="set-aria2-timeout" tabindex="-1">&#8722;</button>
+              <input id="set-aria2-timeout" type="number" min="5" max="120" step="5">
+              <button type="button" class="stbtn" data-target="set-aria2-timeout" tabindex="-1">&#43;</button>
+            </div>
+            <small class="field-note">Seconds before a stalled connection gives up. Applies to new downloads.</small>
+          </label>
+        </div>
+        <div class="settings-card">
+          <div class="card-head">
             <svg viewBox="0 0 24 24" class="card-ico"><path d="M3 9h18M3 15h7a3 3 0 0 0 6 0h5M4 5v14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
             <h3>Network</h3>
           </div>

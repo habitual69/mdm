@@ -186,6 +186,10 @@ struct ConfigUpdate {
     write_auto_subs: Option<bool>,
     embed_metadata: Option<bool>,
     embed_thumbnail: Option<bool>,
+    aria2_offload: Option<bool>,
+    aria2_connections: Option<u32>,
+    aria2_splits: Option<u32>,
+    aria2_connect_timeout: Option<u32>,
 }
 
 async fn get_config(State(st): State<AppState>) -> Json<mdm_core::Config> {
@@ -236,6 +240,18 @@ async fn put_config(
     }
     if let Some(v) = up.embed_thumbnail {
         cfg.embed_thumbnail = v;
+    }
+    if let Some(v) = up.aria2_offload {
+        cfg.aria2_offload = v;
+    }
+    if let Some(v) = up.aria2_connections {
+        cfg.aria2_connections = v.clamp(1, 16);
+    }
+    if let Some(v) = up.aria2_splits {
+        cfg.aria2_splits = v.clamp(1, 16);
+    }
+    if let Some(v) = up.aria2_connect_timeout {
+        cfg.aria2_connect_timeout = v.clamp(5, 300);
     }
     if let Some(dir) = up.output_dir {
         if dir.as_os_str().is_empty() {

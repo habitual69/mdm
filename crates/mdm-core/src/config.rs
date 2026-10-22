@@ -44,6 +44,15 @@ pub struct Config {
     pub embed_metadata: bool,
     /// yt-dlp: embed the thumbnail as cover art.
     pub embed_thumbnail: bool,
+    /// yt-dlp: hand media/direct downloads to the bundled aria2c
+    /// (segmented, multi-connection) instead of yt-dlp's native downloader.
+    pub aria2_offload: bool,
+    /// aria2: max connections per server for HTTP downloads (1..=16).
+    pub aria2_connections: u32,
+    /// aria2: segments per download (HTTP), 1..=16.
+    pub aria2_splits: u32,
+    /// aria2: seconds before a stalled connection gives up (5..=300).
+    pub aria2_connect_timeout: u32,
 }
 
 impl Default for Config {
@@ -64,6 +73,10 @@ impl Default for Config {
             write_auto_subs: false,
             embed_metadata: true,
             embed_thumbnail: true,
+            aria2_offload: true,
+            aria2_connections: 8,
+            aria2_splits: 8,
+            aria2_connect_timeout: 30,
         }
     }
 }

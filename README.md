@@ -52,7 +52,9 @@ curl -s localhost:5757/api/config          # GET/PUT download settings
 #   PUT fields: output_dir, max_concurrent, max_retries, seed_minutes,
 #   speed_limit ("500K"/"5M"/"1G" — overall cap for every engine), proxy
 #   (http/socks5 URL), write_subtitles, write_auto_subs, embed_metadata,
-#   embed_thumbnail
+#   embed_thumbnail, aria2_offload (hand yt-dlp transfers to aria2c),
+#   aria2_connections (1-16, per HTTP server), aria2_splits (1-16),
+#   aria2_connect_timeout (5-300 s)
 curl -s localhost:5757/api/torrent-info -H 'content-type: application/json' \
      -d '{"path":"/path/to/x.torrent"}'    # file list for selective download
 ```

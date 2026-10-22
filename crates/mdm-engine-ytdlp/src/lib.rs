@@ -336,6 +336,25 @@ fn build_args(job: &Job, with_aria2: bool, cfg: &Config) -> Vec<String> {
         args.extend(["--proxy".into(), proxy.to_string()]);
     }
 
+    // Offload: when enabled, yt-dlp hands the byte transfers to the bundled
+    // aria2c (segmented, multi-connection). A connect/read timeout keeps
+    // dead hosts from hanging the job forever.
+    if with_aria2 && cfg.aria2_offload {
+        let timeout = cfg.aria2_connect_timeout.clamp(5, 300);
+        args.extend([
+            "--external-downloader".into(),
+            "aria2c".into(),
+            "--external-downloader-args".into(),
+            format!(
+                "aria2c:-x {} -s {} --connect-timeout {} --timeout {} --max-tries 2 --console-log-level=warn",
+                cfg.aria2_connections.clamp(1, 16).max(1),
+                cfg.aria2_splits.clamp(1, 16).max(1),
+                timeout,
+                timeout.max(60),
+            ),
+        ]);
+    }
+
     // Media extras: subtitles + embedding. Embeds need ffmpeg on hand.
     let have_ffmpeg = bin_path("ffmpeg", cfg).is_ok();
     if cfg.write_subtitles {
@@ -359,14 +378,6 @@ fn build_args(job: &Job, with_aria2: bool, cfg: &Config) -> Vec<String> {
             // recent releases.
             if job.format != "best" {
                 args.extend(["-f".into(), job.format.clone()]);
-            }
-            if with_aria2 {
-                args.extend([
-                    "--external-downloader".into(),
-                    "aria2c".into(),
-                    "--external-downloader-args".into(),
-                    "aria2c:-x 8 -s 8 -j 8".into(),
-                ]);
             }
         }
         mdm_core::JobKind::Audio => {

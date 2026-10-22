@@ -821,6 +821,10 @@ async function loadSettings() {
     $("set-write-auto-subs").checked = !!cfg.write_auto_subs;
     $("set-embed-metadata").checked = cfg.embed_metadata !== false;
     $("set-embed-thumbnail").checked = cfg.embed_thumbnail !== false;
+    $("set-aria2-offload").checked = cfg.aria2_offload !== false;
+    $("set-aria2-conn").value = cfg.aria2_connections ?? 8;
+    $("set-aria2-split").value = cfg.aria2_splits ?? 8;
+    $("set-aria2-timeout").value = cfg.aria2_connect_timeout ?? 30;
   } catch (e) {
     notice(`cannot load settings: ${e}`, true);
   }
@@ -839,6 +843,10 @@ $("settings-form").addEventListener("submit", async (e) => {
     write_auto_subs: $("set-write-auto-subs").checked,
     embed_metadata: $("set-embed-metadata").checked,
     embed_thumbnail: $("set-embed-thumbnail").checked,
+    aria2_offload: $("set-aria2-offload").checked,
+    aria2_connections: Number($("set-aria2-conn").value) || undefined,
+    aria2_splits: Number($("set-aria2-split").value) || undefined,
+    aria2_connect_timeout: Number($("set-aria2-timeout").value) || undefined,
   };
   try {
     const res = await fetch("/api/config", {
