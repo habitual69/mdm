@@ -256,7 +256,7 @@ function buildCard(job) {
   el.appendChild(thumbEl);
   el.appendChild(main);
 
-  return { el, refs: { link, title, pill, acts, sizeC, bar, fill, pct, note, stepper, steps, stage, meta }, lastThumb: "" };
+  return { el, refs: { link, title, pill, acts, sizeC, bar, fill, pct, note, barRow, stepper, steps, stage, meta }, lastThumb: "" };
 }
 
 function setAction(refs, job) {
