@@ -112,6 +112,17 @@ pub fn torrent_info(path: &Path) -> Result<TorrentInfo> {
         .get(b"info")
         .ok_or_else(|| Error::Config("no info dict".into()))?;
 
+    // BEP-3: the info dict must carry a non-empty `pieces` bitfield; aria2
+    // rejects metainfo without it ("Missing pieces in torrent metainfo.").
+    match info.get(b"pieces") {
+        Some(Value::Bytes(b)) if !b.is_empty() => {}
+        _ => {
+            return Err(Error::Config(
+                "torrent is missing its pieces (invalid metainfo)".into(),
+            ))
+        }
+    }
+
     let name = info
         .get(b"name")
         .and_then(Value::as_str)

@@ -786,7 +786,7 @@ $("settings-form").addEventListener("submit", async (e) => {
 });
 
 // stepper buttons next to numeric settings
-document.querySelectorAll(".step").forEach((b) => {
+document.querySelectorAll(".stbtn").forEach((b) => {
   b.addEventListener("click", () => {
     const input = $(b.dataset.target);
     if (!input) return;

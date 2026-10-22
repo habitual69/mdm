@@ -223,18 +223,18 @@
           <label class="field">
             <span>Max parallel downloads</span>
             <div class="stepper-row">
-              <button type="button" class="step" data-target="set-max-concurrent" tabindex="-1">&#8722;</button>
+              <button type="button" class="stbtn" data-target="set-max-concurrent" tabindex="-1">&#8722;</button>
               <input id="set-max-concurrent" type="number" min="1" max="16" step="1">
-              <button type="button" class="step" data-target="set-max-concurrent" tabindex="-1">&#43;</button>
+              <button type="button" class="stbtn" data-target="set-max-concurrent" tabindex="-1">&#43;</button>
             </div>
             <small class="field-note">Jobs that run at once. The rest wait in the queue.</small>
           </label>
           <label class="field">
             <span>Retries per download</span>
             <div class="stepper-row">
-              <button type="button" class="step" data-target="set-max-retries" tabindex="-1">&#8722;</button>
+              <button type="button" class="stbtn" data-target="set-max-retries" tabindex="-1">&#8722;</button>
               <input id="set-max-retries" type="number" min="0" max="10" step="1">
-              <button type="button" class="step" data-target="set-max-retries" tabindex="-1">&#43;</button>
+              <button type="button" class="stbtn" data-target="set-max-retries" tabindex="-1">&#43;</button>
             </div>
             <small class="field-note">0 = fail fast. More retries ride out flaky sources.</small>
           </label>
@@ -247,9 +247,9 @@
           <label class="field">
             <span>Keep seeding after finish</span>
             <div class="stepper-row">
-              <button type="button" class="step" data-target="set-seed-minutes" tabindex="-1">&#8722;</button>
+              <button type="button" class="stbtn" data-target="set-seed-minutes" tabindex="-1">&#8722;</button>
               <input id="set-seed-minutes" type="number" min="0" max="10080" step="1">
-              <button type="button" class="step" data-target="set-seed-minutes" tabindex="-1">&plus;</button>
+              <button type="button" class="stbtn" data-target="set-seed-minutes" tabindex="-1">&plus;</button>
             </div>
             <small class="field-note">Minutes to seed once a torrent finishes. 0 stops right away.</small>
           </label>

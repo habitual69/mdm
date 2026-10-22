@@ -48,7 +48,22 @@ impl Aria2Rpc {
             .await
             .map_err(|e| RpcError::Http(e.to_string()))?;
         if !resp.status().is_success() {
-            return Err(RpcError::Http(format!("status {}", resp.status())));
+            let status = resp.status();
+            // aria2 answers HTTP 4xx with a JSON-RPC error body ("Missing
+            // pieces in torrent metainfo.") — surface it instead of the
+            // generic HTTP status.
+            let body = resp.text().await.unwrap_or_default();
+            let detail = serde_json::from_str::<Value>(&body)
+                .ok()
+                .and_then(|v| {
+                    v.get("error")?
+                        .get("message")?
+                        .as_str()
+                        .map(String::from)
+                });
+            return Err(RpcError::Rpc(detail.unwrap_or_else(|| {
+                format!("aria2 http: status {status}")
+            })));
         }
         let v: Value = resp.json().await.map_err(|e| RpcError::Http(e.to_string()))?;
         if let Some(err) = v.get("error") {

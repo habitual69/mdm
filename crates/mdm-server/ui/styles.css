@@ -662,7 +662,7 @@ html, body {
 }
 .stepper-row input::-webkit-outer-spin-button,
 .stepper-row input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.step {
+.stbtn {
   width: 32px;
   border: 1px solid var(--line);
   border-radius: 9px;
@@ -672,8 +672,8 @@ html, body {
   line-height: 1;
   cursor: pointer;
 }
-.step:hover { border-color: var(--accent); color: var(--accent); }
-.step:active { transform: translateY(1px); }
+.stbtn:hover { border-color: var(--accent); color: var(--accent); }
+.stbtn:active { transform: translateY(1px); }
 .field-note { color: var(--muted); font-size: 11.5px; }
 
 .check { display: flex; align-items: center; gap: 9px; font-size: 13px; cursor: pointer; }

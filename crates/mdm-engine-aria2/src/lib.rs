@@ -168,6 +168,20 @@ impl Engine for Aria2Engine {
         if let Err(e) = self.apply_globals(&ctx.cfg).await {
             warn!("aria2 global options not applied: {e}");
         }
+
+        // Local .torrent file: surface the display name as the job title.
+        if job.kind == mdm_core::JobKind::Torrent && job.title.is_none() {
+            if let Ok(path) = std::path::PathBuf::from(&job.url).canonicalize()
+                && let Ok(info) = torrent_info(&path)
+                && !info.name.is_empty()
+            {
+                ctx.send_patch(
+                    &job.id,
+                    JobPatch { title: Some(info.name), ..Default::default() },
+                );
+            }
+        }
+
         let gid = self.reattach_or_add(&job).await?;
 
         // Persist our tracking gid early so a crash keeps the linkage.
