@@ -720,13 +720,14 @@ html, body {
 .saved-hint { color: var(--accent-2); font-size: 12.5px; font-weight: 600; }
 .settings-card code { color: var(--accent-2); font-size: 11px; }
 
-@media (max-width: 700px) {
-  .settings-grid { grid-template-columns: 1fr; }
-}
-
-/* ---------- small widths ---------- */
-
 @media (max-width: 860px) {
+  .settings-grid { display: flex; flex-wrap: nowrap; overflow-x: auto; scroll-snap-type: x mandatory; gap: 12px; -webkit-overflow-scrolling: touch; padding-bottom: 6px; }
+  .settings-card { flex: 0 0 86%; scroll-snap-align: center; min-width: 0; max-width: none; }
+  .settings-grid .span-2, .settings-card.save-card { width: 100%; flex: 0 0 92%; }
+  .settings-card.save-card { flex-direction: row; position: sticky; right: 0; background: var(--bg); box-shadow: -10px 0 14px -4px rgba(0,0,0,.35); }
+  .settings-grid::-webkit-scrollbar { height: 8px; }
+  .settings-grid::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+  .settings-grid::-webkit-scrollbar-track { background: transparent; }
   .sidebar, .app.collapsed .sidebar { width: 64px; }
   .sidebar .brand-text, .sidebar .section, .nav-item span, #collapse span, .health { display: none; }
   .panel { margin: 0; border-radius: 0; }
