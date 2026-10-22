@@ -113,7 +113,7 @@ function fmtPct(p) {
 function fmtElapsed(sec) {
   const s = Math.floor(sec);
   if (s >= 3600) return `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-  return `${Math.floor(s / 60)}.${String(s % 60).padStart(2, "0")}`;
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
 const seenRunning = new Map(); // id -> started-at ms (this page load)

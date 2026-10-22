@@ -120,9 +120,9 @@ html, body {
 .panel {
   flex: 1;
   min-width: 0;
-  margin: 14px 14px 14px 0;
+  margin: 0;
   background: var(--panel);
-  border: 1px solid var(--line);
+  border: 0;
   border-radius: 0;
   overflow-y: auto;
   position: relative;
@@ -644,7 +644,7 @@ html, body {
 @media (max-width: 860px) {
   .sidebar, .app.collapsed .sidebar { width: 64px; }
   .sidebar .brand-text, .sidebar .section, .nav-item span, #collapse span, .health { display: none; }
-  .panel { margin: 10px 10px 10px 0; border-radius: 0; }
+  .panel { margin: 0; border-radius: 0; }
   .view { padding: 14px; }
   .search { width: 120px; }
 }

@@ -201,7 +201,9 @@ impl Engine for Aria2Engine {
                         ctx.send_patch(&job.id, JobPatch {
                             state: Some(JobState::Running),
                             progress: Some(0.0),
+                            downloaded_bytes: Some(0),
                             total_bytes: Some(0),
+                            speed_bps: Some(0),
                             ..Default::default()
                         });
                         continue;
