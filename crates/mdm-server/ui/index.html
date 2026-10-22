@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mdm — Media Download Manager</title>
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">mdm</span>
+    <span class="sub">Media Download Manager</span>
+  </div>
+  <div class="health"><span id="health-dot" class="dot ok"></span><span id="health-text">connecting…</span></div>
+</header>
+
+<main>
+  <form id="add-form" class="addbar" autocomplete="off">
+    <input id="url" type="text" placeholder="Paste a link — video, torrent or magnet…" required spellcheck="false">
+    <select id="kind" title="Type (auto-detect if empty)">
+      <option value="">auto</option>
+      <option value="video">video</option>
+      <option value="audio">audio</option>
+      <option value="direct">file</option>
+      <option value="torrent">torrent</option>
+      <option value="magnet">magnet</option>
+    </select>
+    <select id="format" title="yt-dlp format selector">
+      <option value="">best</option>
+      <option value="bestvideo+bestaudio/b">best (explicit)</option>
+      <option value="bestvideo[height<=1080]+bestaudio/b">≤1080p</option>
+      <option value="bestvideo[height<=720]+bestaudio/b">≤720p</option>
+      <option value="bestvideo[height<=480]+bestaudio/b">≤480p</option>
+    </select>
+    <button type="submit" id="add-btn">Download</button>
+  </form>
+
+  <div id="notice" class="notice hidden"></div>
+
+  <table class="queue">
+    <thead>
+      <tr>
+        <th class="c-name">File</th>
+        <th class="c-kind">Type</th>
+        <th class="c-state">State</th>
+        <th class="c-prog">Progress</th>
+        <th class="c-size">Size</th>
+        <th class="c-speed">Speed</th>
+        <th class="c-eta">ETA</th>
+        <th class="c-actions"></th>
+      </tr>
+    </thead>
+    <tbody id="queue-body"></tbody>
+  </table>
+
+  <div id="empty" class="empty hidden">Nothing queued yet. Paste a link above.</div>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

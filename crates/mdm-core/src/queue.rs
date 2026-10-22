@@ -264,7 +264,7 @@ fn finalize(st: &mut ManagerShared, job_id: &str, result: std::result::Result<Jo
     match result {
         Ok(done) => {
             let mut patch = JobPatch::for_id(job_id, JobState::Done);
-            patch.progress = Some(1.0);
+            patch.progress = Some(100.0);
             patch.output_path = done.output_path;
             patch.title = done.title;
             patch.clear_error = true;

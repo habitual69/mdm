@@ -3,8 +3,9 @@
 Rust download manager wrapping **yt-dlp** (1000+ video sites) and **aria2c**
 (torrents, magnets, direct files) behind one local queue with a REST API.
 
-Phase 1 status: engine + CLI + local daemon work on Linux (Windows/macOS
-should build untested; the Tauri desktop app is Phase 2).
+Phase 2 status: engines + CLI + local daemon + **web UI** on Linux
+(`http://localhost:5757` once the daemon runs). Tauri desktop shell and
+engine auto-update are the remaining Phase 2 items.
 
 ## Quick start
 
@@ -16,6 +17,8 @@ cargo run -q --bin mdm -- doctor # checks your setup
 cargo run -q --bin mdm -- add "https://www.youtube.com/watch?v=jNQXAC9IVRw"
 cargo run -q --bin mdm -- ls --watch     # live progress
 mdm rm <short-id>
+
+xdg-open http://localhost:5757           # web UI (same daemon)
 ```
 
 `mdm add` auto-starts a detached daemon on `127.0.0.1:5757`. State lives in
@@ -29,7 +32,7 @@ mdm rm <short-id>
 | `mdm-core` | job model, SQLite queue, engine trait, manager loop |
 | `mdm-engine-ytdlp` | yt-dlp subprocess driving (progress parse, kill-on-cancel) |
 | `mdm-engine-aria2` | spawns aria2c `--enable-rpc`, JSON-RPC client, torrent/magnet loop |
-| `mdm-server` | axum REST + WS (`/api/jobs`, `/api/events`) |
+| `mdm-server` | axum REST + WS (`/api/jobs`, `/api/events`) + embedded web UI at `/` |
 | `mdm-cli` | `mdm add / ls / watch / pause / resume / rm / daemon / doctor` |
 
 ## API (localhost, Phase 1 — no token yet)
@@ -44,8 +47,9 @@ curl -s localhost:5757/api/jobs
 ## Roadmap
 
 1. **Done — Phase 1**: core queue, both engines, CLI, localhost API.
-2. Phase 2: Tauri desktop shell + web UI + auto-installed/updated engines
-   (yt-dlp, aria2c, ffmpeg with SHA-256 check), pause/resume polish.
+2. **Phase 2 (in progress)**: auto-installed engines ✓, web UI ✓
+   (yt-dlp/aria2c/ffmpeg install with SHA-256 check); remaining: Tauri
+   desktop shell, pause/resume polish.
 3. Phase 3: iOS Shortcut + Android share-target posting to this API
    (LAN or Tailscale).
 4. Phase 4: Android on-device (aria2c + ffmpeg as `lib*.so`; embedded Python

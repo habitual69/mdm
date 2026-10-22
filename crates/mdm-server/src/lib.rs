@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
+use axum::http::{header, HeaderValue, StatusCode};
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use mdm_core::{Config, Event, Job, JobState, NewJobReq, Queue};
@@ -29,6 +29,8 @@ pub struct AppState {
 
 pub fn router(q: Arc<Queue>) -> Router {
     Router::new()
+        .route("/", get(ui_index))
+        .route("/static/{*path}", get(ui_static))
         .route("/api/health", get(health))
         .route("/api/jobs", post(add_job).get(list_jobs))
         .route("/api/jobs/{id}", get(get_job).delete(delete_job))
@@ -36,6 +38,42 @@ pub fn router(q: Arc<Queue>) -> Router {
         .route("/api/jobs/{id}/resume", post(resume_job))
         .route("/api/events", get(ws_events))
         .with_state(AppState { queue: q })
+}
+
+// --- embedded web UI -------------------------------------------------------
+
+#[derive(rust_embed::RustEmbed)]
+#[folder = "ui"]
+struct UiAssets;
+
+async fn ui_index() -> Response {
+    ui_static(Path("index.html".to_string())).await
+}
+
+async fn ui_static(Path(path): Path<String>) -> Response {
+    let name = path.trim_start_matches('/');
+    if name.contains("..") || name.is_empty() {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let Some(file) = UiAssets::get(name) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let mime = match name.rsplit('.').next() {
+        Some("html") => "text/html; charset=utf-8",
+        Some("css") => "text/css; charset=utf-8",
+        Some("js") | Some("mjs") => "text/javascript; charset=utf-8",
+        Some("svg") => "image/svg+xml",
+        Some("png") => "image/png",
+        Some("ico") => "image/x-icon",
+        Some("json") => "application/json",
+        Some("woff2") => "font/woff2",
+        _ => "application/octet-stream",
+    };
+    let bytes = file.data.into_owned();
+    let mut resp = Response::new(axum::body::Body::from(bytes));
+    resp.headers_mut()
+        .insert(header::CONTENT_TYPE, HeaderValue::from_static(mime));
+    resp
 }
 
 pub async fn serve(q: Arc<Queue>, addr: &str) -> std::io::Result<()> {
