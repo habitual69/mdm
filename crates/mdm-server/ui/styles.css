@@ -123,13 +123,30 @@ html, body {
   margin: 14px 14px 14px 0;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 0;
   overflow-y: auto;
   position: relative;
   display: flex;
   flex-direction: column;
 }
-.panel > .view:last-child { padding-bottom: 0; }
+
+/* downloads view stretches so the status footer docks at panel bottom */
+#view-downloads {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+#view-downloads .head-row,
+#view-downloads .chips,
+#view-downloads .kind-note,
+#view-downloads .dl-summary,
+#view-downloads #cards,
+#view-downloads #empty {
+  flex: 0 0 auto;
+}
+#view-downloads .group { flex: 0 0 auto; }
+/* footer flush with panel bottom */
+#view-downloads { padding-bottom: 0; }
 
 .view { padding: 18px 22px 22px; }
 .view h2 { margin: 4px 0 14px; font-size: 17px; }
@@ -581,7 +598,7 @@ html, body {
   bottom: 0;
   background: var(--panel-2);
   border-top: 1px solid var(--line);
-  margin: 10px -22px 0;
+  margin: auto -22px 0;
   padding: 9px 22px;
   display: flex;
   align-items: center;
@@ -627,7 +644,7 @@ html, body {
 @media (max-width: 860px) {
   .sidebar, .app.collapsed .sidebar { width: 64px; }
   .sidebar .brand-text, .sidebar .section, .nav-item span, #collapse span, .health { display: none; }
-  .panel { margin: 10px 10px 10px 0; border-radius: 12px; }
+  .panel { margin: 10px 10px 10px 0; border-radius: 0; }
   .view { padding: 14px; }
   .search { width: 120px; }
 }
