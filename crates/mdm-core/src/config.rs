@@ -53,6 +53,10 @@ pub struct Config {
     pub aria2_splits: u32,
     /// aria2: seconds before a stalled connection gives up (5..=300).
     pub aria2_connect_timeout: u32,
+    /// aria2 offload failed -> retry the yt-dlp job with yt-dlp's own
+    /// downloader so downloads still complete on networks that block
+    /// aria2's transfer path.
+    pub aria2_fallback: bool,
 }
 
 impl Default for Config {
@@ -77,6 +81,7 @@ impl Default for Config {
             aria2_connections: 8,
             aria2_splits: 8,
             aria2_connect_timeout: 30,
+            aria2_fallback: true,
         }
     }
 }

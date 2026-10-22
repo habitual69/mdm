@@ -41,107 +41,13 @@ fn is_fatal(msg: &str) -> bool {
 }
 
 impl Ytdlp {
-    pub fn from_config(cfg: &Config) -> Result<Ytdlp> {
-        let bin = bin_path("yt-dlp", cfg)?;
-        let with_aria2 = bin_path("aria2c", cfg).is_ok();
-        Ok(Ytdlp { bin, with_aria2, children: Mutex::new(HashMap::new()) })
-    }
-
-    fn register_child(&self, job_id: &str, pid: u32) {
-        self.children.lock().unwrap().insert(job_id.into(), pid);
-    }
-
-    fn unregister_child(&self, job_id: &str) {
-        let _ = self.children.lock().unwrap().remove(job_id);
-    }
-}
-
-fn last_lines(s: &str, n: usize) -> String {
-    let lines: Vec<&str> = s.lines().collect();
-    let start = lines.len().saturating_sub(n);
-    lines[start..].join("\n")
-}
-
-fn handle_line(
-    line: &str,
-    job: &Job,
-    ctx: &EngineCtx,
-    final_path: &mut Option<PathBuf>,
-    last_emit: &mut tokio::time::Instant,
-) {
-    match parse::classify(line) {
-        parse::Line::Progress { pct, total, speed, eta, .. } => {
-            let now = tokio::time::Instant::now();
-            if now - *last_emit >= Duration::from_millis(200) || pct >= 100.0 {
-                *last_emit = now;
-                let mut patch = JobPatch::for_id(&job.id, JobState::Running);
-                patch.progress = Some(pct);
-                patch.total_bytes = total;
-                patch.speed_bps = speed;
-                patch.eta_sec = eta;
-                patch.downloaded_bytes =
-                    total.map(|t| ((pct / 100.0).clamp(0.0, 1.0) as i64) * t);
-                ctx.send_patch(&job.id, patch);
-            }
-        }
-        parse::Line::Item { .. } => {
-            // Playlist item boundary: per-item progress resets; acceptable Phase 1.
-        }
-        parse::Line::Destination(p) => {
-            if final_path.is_none() {
-                *final_path = Some(p);
-            }
-        }
-        parse::Line::FinalPath(p) => {
-            *final_path = Some(p);
-        }
-        parse::Line::PostProcess(tag) => {
-            debug!("job {} postprocess: {tag}", job.short_id());
-        }
-        parse::Line::Ignore => {}
-    }
-}
-
-#[async_trait]
-impl Engine for Ytdlp {
-    fn engine_kind(&self) -> EngineKind {
-        EngineKind::Ytdlp
-    }
-
-    async fn resolve(&self, job: &Job, _ctx: &EngineCtx) -> Result<mdm_core::ResolveInfo> {
-        let out = tokio::process::Command::new(&self.bin)
-            .args([
-                "--no-config",
-                "--no-warnings",
-                "--flat-playlist",
-                "--dump-single-json",
-            ])
-            .arg(&job.url)
-            .env("NO_COLOR", "1")
-            .output()
-            .await
-            .map_err(|e| Error::Engine(format!("spawn yt-dlp: {e}")))?;
-
-        if !out.status.success() {
-            let msg = String::from_utf8_lossy(&out.stderr);
-            let tail = last_lines(&msg, 3);
-            return Err(Error::Engine(format!("resolve failed: {tail}")));
-        }
-        let v: serde_json::Value = serde_json::from_slice(&out.stdout)?;
-        let title = v.get("title").and_then(|t| t.as_str()).map(String::from);
-        if v.get("_type").and_then(|t| t.as_str()) == Some("playlist") {
-            let count = v
-                .get("playlist_count")
-                .and_then(|c| c.as_u64())
-                .or_else(|| v.get("entries").and_then(|e| e.as_array()).map(|a| a.len() as u64));
-            Ok(mdm_core::ResolveInfo { title, n_items: count })
-        } else {
-            Ok(mdm_core::ResolveInfo { title, n_items: None })
-        }
-    }
-
-    async fn run(&self, job: Job, ctx: EngineCtx) -> std::result::Result<JobDone, JobError> {
-        let args = build_args(&job, self.with_aria2, &ctx.cfg);
+    async fn run_once(
+        &self,
+        job: &Job,
+        ctx: &EngineCtx,
+        offload: bool,
+    ) -> std::result::Result<JobDone, JobError> {
+        let args = build_args(job, offload, &ctx.cfg);
         debug!("yt-dlp args: {args:?}");
 
         let mut cmd = tokio::process::Command::new(&self.bin);
@@ -211,8 +117,8 @@ impl Engine for Ytdlp {
                                     if n.unwrap_or(0) == 0 { break; }
                                     handle_line(
                                         line_buf.trim_end_matches(['\r','\n']),
-                                        &job,
-                                        &ctx,
+                                        job,
+                                        ctx,
                                         &mut final_path,
                                         &mut last_emit,
                                     );
@@ -252,8 +158,8 @@ impl Engine for Ytdlp {
                         Ok(_) => {
                             handle_line(
                                 line_buf.trim_end_matches(['\r', '\n']),
-                                &job,
-                                &ctx,
+                                job,
+                                ctx,
                                 &mut final_path,
                                 &mut last_emit,
                             );
@@ -306,6 +212,131 @@ impl Engine for Ytdlp {
         }
     }
 
+    pub fn from_config(cfg: &Config) -> Result<Ytdlp> {
+        let bin = bin_path("yt-dlp", cfg)?;
+        let with_aria2 = bin_path("aria2c", cfg).is_ok();
+        Ok(Ytdlp { bin, with_aria2, children: Mutex::new(HashMap::new()) })
+    }
+
+    fn register_child(&self, job_id: &str, pid: u32) {
+        self.children.lock().unwrap().insert(job_id.into(), pid);
+    }
+
+    fn unregister_child(&self, job_id: &str) {
+        let _ = self.children.lock().unwrap().remove(job_id);
+    }
+}
+
+fn last_lines(s: &str, n: usize) -> String {
+    let lines: Vec<&str> = s.lines().collect();
+    let start = lines.len().saturating_sub(n);
+    lines[start..].join("\n")
+}
+
+fn handle_line(
+    line: &str,
+    job: &Job,
+    ctx: &EngineCtx,
+    final_path: &mut Option<PathBuf>,
+    last_emit: &mut tokio::time::Instant,
+) {
+    match parse::classify(line) {
+        parse::Line::Progress { pct, total, speed, eta, .. } => {
+            let now = tokio::time::Instant::now();
+            if now - *last_emit >= Duration::from_millis(200) || pct >= 100.0 {
+                *last_emit = now;
+                let mut patch = JobPatch::for_id(&job.id, JobState::Running);
+                patch.progress = Some(pct);
+                patch.total_bytes = total;
+                patch.speed_bps = speed;
+                patch.eta_sec = eta;
+                patch.downloaded_bytes =
+                    total.map(|t| ((pct / 100.0).clamp(0.0, 1.0) as i64) * t);
+                ctx.send_patch(&job.id, patch);
+            }
+        }
+        parse::Line::Item { .. } => {
+            // Playlist item boundary: per-item progress resets; acceptable Phase 1.
+        }
+        parse::Line::Destination(p) => {
+            if final_path.is_none() {
+                *final_path = Some(p);
+            }
+        }
+        parse::Line::FinalPath(p) => {
+            *final_path = Some(p);
+        }
+        parse::Line::Title(title) => {
+            if !title.is_empty() {
+                let mut patch = JobPatch::for_id(&job.id, JobState::Running);
+                patch.title = Some(title);
+                ctx.send_patch(&job.id, patch);
+            }
+        }
+        parse::Line::PostProcess(tag) => {
+            debug!("job {} postprocess: {tag}", job.short_id());
+        }
+        parse::Line::Ignore => {}
+    }
+}
+
+#[async_trait]
+impl Engine for Ytdlp {
+    fn engine_kind(&self) -> EngineKind {
+        EngineKind::Ytdlp
+    }
+
+    async fn resolve(&self, job: &Job, _ctx: &EngineCtx) -> Result<mdm_core::ResolveInfo> {
+        let out = tokio::process::Command::new(&self.bin)
+            .args([
+                "--no-config",
+                "--no-warnings",
+                "--flat-playlist",
+                "--dump-single-json",
+            ])
+            .arg(&job.url)
+            .env("NO_COLOR", "1")
+            .output()
+            .await
+            .map_err(|e| Error::Engine(format!("spawn yt-dlp: {e}")))?;
+
+        if !out.status.success() {
+            let msg = String::from_utf8_lossy(&out.stderr);
+            let tail = last_lines(&msg, 3);
+            return Err(Error::Engine(format!("resolve failed: {tail}")));
+        }
+        let v: serde_json::Value = serde_json::from_slice(&out.stdout)?;
+        let title = v.get("title").and_then(|t| t.as_str()).map(String::from);
+        if v.get("_type").and_then(|t| t.as_str()) == Some("playlist") {
+            let count = v
+                .get("playlist_count")
+                .and_then(|c| c.as_u64())
+                .or_else(|| v.get("entries").and_then(|e| e.as_array()).map(|a| a.len() as u64));
+            Ok(mdm_core::ResolveInfo { title, n_items: count })
+        } else {
+            Ok(mdm_core::ResolveInfo { title, n_items: None })
+        }
+    }
+
+    async fn run(&self, job: Job, ctx: EngineCtx) -> std::result::Result<JobDone, JobError> {
+        let offload = self.with_aria2 && ctx.cfg.aria2_offload;
+        let result = self.run_once(&job, &ctx, offload).await;
+        match result {
+            // aria2 offload failed -> let yt-dlp download natively so the
+            // job still completes on networks that block aria2's path.
+            Err(e) if offload && ctx.cfg.aria2_fallback => {
+                warn!(
+                    "job {}: aria2 offload failed ({e:?}) — retrying with yt-dlp's native downloader",
+                    job.short_id()
+                );
+                self.run_once(&job, &ctx, false).await
+            }
+            other => other,
+        }
+    }
+
+
+
     async fn remove(&self, job: &Job) {
         let pid = self.children.lock().unwrap().get(&job.id).copied();
         if let Some(pid) = pid {
@@ -314,7 +345,7 @@ impl Engine for Ytdlp {
     }
 }
 
-fn build_args(job: &Job, with_aria2: bool, cfg: &Config) -> Vec<String> {
+fn build_args(job: &Job, offload: bool, cfg: &Config) -> Vec<String> {
     let out = job.output_dir.display().to_string();
     let mut args: Vec<String> = vec![
         "--no-config".into(),
@@ -324,6 +355,9 @@ fn build_args(job: &Job, with_aria2: bool, cfg: &Config) -> Vec<String> {
         "--continue".into(),
         "--print".into(),
         "after_move:filepath".into(),
+        // Early title line for the queue card (parsed as mdm_title:).
+        "--print".into(),
+        "mdm_title:%(title)s".into(),
         "-P".into(),
         out,
     ];
@@ -339,7 +373,7 @@ fn build_args(job: &Job, with_aria2: bool, cfg: &Config) -> Vec<String> {
     // Offload: when enabled, yt-dlp hands the byte transfers to the bundled
     // aria2c (segmented, multi-connection). A connect/read timeout keeps
     // dead hosts from hanging the job forever.
-    if with_aria2 && cfg.aria2_offload {
+    if offload {
         let timeout = cfg.aria2_connect_timeout.clamp(5, 300);
         args.extend([
             "--external-downloader".into(),

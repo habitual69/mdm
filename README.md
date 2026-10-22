@@ -54,7 +54,8 @@ curl -s localhost:5757/api/config          # GET/PUT download settings
 #   (http/socks5 URL), write_subtitles, write_auto_subs, embed_metadata,
 #   embed_thumbnail, aria2_offload (hand yt-dlp transfers to aria2c),
 #   aria2_connections (1-16, per HTTP server), aria2_splits (1-16),
-#   aria2_connect_timeout (5-300 s)
+#   aria2_connect_timeout (5-300 s),
+#   aria2_fallback (retry failed aria2 offload with yt-dlp's own downloader)
 curl -s localhost:5757/api/torrent-info -H 'content-type: application/json' \
      -d '{"path":"/path/to/x.torrent"}'    # file list for selective download
 ```

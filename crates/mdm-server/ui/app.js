@@ -268,6 +268,20 @@ function icon(html) {
 
 // ---------- cards ----------
 
+// Engine chip: yt-dlp media jobs hand the byte transfer to aria2 when
+// the offload setting is on — show that in the UI.
+function engineTag(job) {
+  if (
+    job.engine === "ytdlp" &&
+    (job.kind === "video" || job.kind === "audio") &&
+    cfgCache &&
+    cfgCache.aria2_offload !== false
+  ) {
+    return "ytdlp·aria2";
+  }
+  return job.engine;
+}
+
 function buildCard(job) {
   const el = mk("div", "job-card");
   el.dataset.g = "";
@@ -294,7 +308,7 @@ function buildCard(job) {
   const site = siteLabel(job);
   if (site) meta.appendChild(mk("span", null, site));
   meta.appendChild(icon('<svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="18" cy="12" r="1.6" fill="currentColor"/></svg>'));
-  meta.appendChild(mk("span", "engine-tag", job.engine));
+  meta.appendChild(mk("span", "engine-tag", engineTag(job)));
   const fmtC = fmtChip(job);
   if (fmtC) meta.appendChild(mk("span", "meta-chip", fmtC));
   const sizeC = mk("span", "meta-chip");
@@ -822,6 +836,7 @@ async function loadSettings() {
     $("set-embed-metadata").checked = cfg.embed_metadata !== false;
     $("set-embed-thumbnail").checked = cfg.embed_thumbnail !== false;
     $("set-aria2-offload").checked = cfg.aria2_offload !== false;
+    $("set-aria2-fallback").checked = cfg.aria2_fallback !== false;
     $("set-aria2-conn").value = cfg.aria2_connections ?? 8;
     $("set-aria2-split").value = cfg.aria2_splits ?? 8;
     $("set-aria2-timeout").value = cfg.aria2_connect_timeout ?? 30;
@@ -844,6 +859,7 @@ $("settings-form").addEventListener("submit", async (e) => {
     embed_metadata: $("set-embed-metadata").checked,
     embed_thumbnail: $("set-embed-thumbnail").checked,
     aria2_offload: $("set-aria2-offload").checked,
+    aria2_fallback: $("set-aria2-fallback").checked,
     aria2_connections: Number($("set-aria2-conn").value) || undefined,
     aria2_splits: Number($("set-aria2-split").value) || undefined,
     aria2_connect_timeout: Number($("set-aria2-timeout").value) || undefined,

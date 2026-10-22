@@ -190,6 +190,7 @@ struct ConfigUpdate {
     aria2_connections: Option<u32>,
     aria2_splits: Option<u32>,
     aria2_connect_timeout: Option<u32>,
+    aria2_fallback: Option<bool>,
 }
 
 async fn get_config(State(st): State<AppState>) -> Json<mdm_core::Config> {
@@ -252,6 +253,9 @@ async fn put_config(
     }
     if let Some(v) = up.aria2_connect_timeout {
         cfg.aria2_connect_timeout = v.clamp(5, 300);
+    }
+    if let Some(v) = up.aria2_fallback {
+        cfg.aria2_fallback = v;
     }
     if let Some(dir) = up.output_dir {
         if dir.as_os_str().is_empty() {

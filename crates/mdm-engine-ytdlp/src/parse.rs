@@ -15,6 +15,8 @@ pub enum Line {
     Item { idx: u64, n: u64 },
     Destination(PathBuf),
     FinalPath(PathBuf),
+    /// Video/playlist title from `--print "mdm_title:%(title)s"`.
+    Title(String),
     /// Merger / ExtractAudio / FixupM4a / etc. -> post-process phase.
     PostProcess(String),
     Ignore,
@@ -58,6 +60,15 @@ pub fn classify(line: &str) -> Line {
     let t = line.trim();
     if t.is_empty() {
         return Line::Ignore;
+    }
+
+    // Early title line from `--print "mdm_title:%(title)s"`.
+    if let Some(title) = t.strip_prefix("mdm_title:") {
+        let title = title.trim();
+        if title.is_empty() {
+            return Line::Ignore;
+        }
+        return Line::Title(title.to_string());
     }
 
     // Playlist item counter.
@@ -137,6 +148,13 @@ pub fn is_final_path(line: &str) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_title_line() {
+        assert_eq!(classify("mdm_title:Hello World"), Line::Title("Hello World".into()));
+        assert_eq!(classify("mdm_title:  "), Line::Ignore);
+        assert_eq!(classify("[download] Destination: x"), Line::Destination("x".into()));
+    }
 
     #[test]
     fn parses_progress_line() {
