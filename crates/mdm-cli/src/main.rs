@@ -36,8 +36,15 @@ impl KindArg {
     }
 }
 
-#[derive(Subcommand)]
+        #[derive(Subcommand)]
 enum Cmd {
+    /// Ensure yt-dlp / aria2c / ffmpeg exist (installs missing ones, no root).
+    Setup {
+        #[arg(long, help = "reinstall even when present")]
+        force: bool,
+        #[arg(long, help = "restrict to one engine (yt-dlp|aria2c|ffmpeg)")]
+        only: Option<String>,
+    },
     /// Queue URL(s). Starts the daemon if it is not running.
     Add {
         urls: Vec<String>,
@@ -76,6 +83,7 @@ async fn main() -> Result<()> {
 async fn dispatch(cmd: Cmd) -> Result<()> {
     match cmd {
         Cmd::Daemon => run_daemon().await,
+        Cmd::Setup { force, only } => run_setup(force, only).await,
         Cmd::Add { urls, format, kind, out } => {
             if urls.is_empty() {
                 bail!("add: give at least one URL");
@@ -239,6 +247,48 @@ fn spawn_detached_daemon() -> Result<()> {
     Ok(())
 }
 
+async fn run_setup(force: bool, only: Option<String>) -> Result<()> {
+    let cfg = mdm_core::load_config()?;
+    let installer = mdm_bins::Installer::new(&cfg);
+    let targets: Vec<&str> = match only.as_deref() {
+        Some(o) => vec![match o {
+            "aria2" | "aria2c" => "aria2c",
+            "ffmpeg" => "ffmpeg",
+            "ytdlp" | "yt-dlp" => "yt-dlp",
+            other => bail!("unknown engine {other}; use yt-dlp|aria2c|ffmpeg"),
+        }],
+        None => vec!["yt-dlp", "aria2c", "ffmpeg"],
+    };
+    if force {
+        for name in targets {
+            let st = installer.install(name).await;
+            match st.action {
+                mdm_bins::BinAction::Installed { path, version, sha_ok } => {
+                    println!(
+                        "installed {name} {version} -> {path}{}",
+                        sha_ok.map(|b| if b { "  [sha256 ok]" } else { "  [unverified]" }).unwrap_or_default()
+                    );
+                }
+                mdm_bins::BinAction::Failed { error } => println!("FAILED {name}: {error}"),
+                other => println!("{name}: {other:?}"),
+            }
+        }
+    }
+    println!("state after setup:");
+    for st in installer.status_all(&cfg).await {
+        match st.action {
+            mdm_bins::BinAction::AlreadyOk { version, path } => {
+                println!("  {:<8} OK   {ver}\n          -> {path}", st.name, ver = version);
+            }
+            mdm_bins::BinAction::Skipped { reason } => {
+                println!("  {:<8} {} ({reason})", st.name, "MISSING");
+            }
+            other => println!("  {:<8} {:?}", st.name, other),
+        }
+    }
+    Ok(())
+}
+
 async fn run_daemon() -> Result<()> {
     let cfg = mdm_core::load_config()?;
     let data_dir = mdm_core::ensure_dir(&mdm_core::data_dir())?;
@@ -259,6 +309,22 @@ async fn run_daemon() -> Result<()> {
         .init();
 
     println!("mdm daemon -> config {}, log {}", load_config_public(), log_path.display());
+
+    // Setup installs dependencies: anything missing on PATH gets downloaded
+    // into data_dir/bin before the engines are built (opt-out via bin_dir).
+    let setup = mdm_bins::Installer::new(&cfg);
+    for st in setup.ensure_all(&cfg).await {
+        match &st.action {
+            mdm_bins::BinAction::AlreadyOk { .. } => {}
+            mdm_bins::BinAction::Installed { path, version, .. } => {
+                println!("installed {} {version} -> {path}", st.name);
+            }
+            mdm_bins::BinAction::Failed { error } => {
+                println!("setup {}: {}", st.name, error);
+            }
+            _ => {}
+        }
+    }
 
     let queue = mdm_server::build_queue(cfg.clone()).context("build queue")?;
 

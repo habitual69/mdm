@@ -132,9 +132,12 @@ fn candidates(name: &str, extra: Option<&[PathBuf]>) -> Vec<PathBuf> {
     out
 }
 
-/// Locate an engine binary: `extra` dirs first (e.g. cfg.bin_dir), then PATH.
+/// Locate an engine binary: `extra` dirs first (cfg.bin_dir), then mdm's own
+/// bin dir (~data/mdm/bin where auto-installs land), then PATH.
 pub fn find_bin(name: &str, extra: Option<&[PathBuf]>) -> Option<PathBuf> {
-    candidates(name, extra).into_iter().next()
+    let mut dirs: Vec<PathBuf> = extra.unwrap_or_default().to_vec();
+    dirs.push(crate::config::data_dir().join("bin"));
+    candidates(name, Some(&dirs)).into_iter().next()
 }
 
 pub fn bin_path(name: &str, cfg: &Config) -> Result<PathBuf> {

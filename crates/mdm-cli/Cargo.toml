@@ -10,6 +10,7 @@ path = "src/main.rs"
 [dependencies]
 mdm-core = { workspace = true }
 mdm-server = { path = "../mdm-server" }
+mdm-bins = { workspace = true }
 tokio.workspace = true
 clap.workspace = true
 reqwest.workspace = true
