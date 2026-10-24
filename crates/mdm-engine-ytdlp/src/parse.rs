@@ -55,6 +55,36 @@ fn parse_eta(s: &str) -> Option<i64> {
     }
 }
 
+fn parse_aria_eta(s: &str) -> Option<i64> {
+    if s.is_empty() || s.contains("Unknown") {
+        return None;
+    }
+    if s.contains(':') {
+        return parse_eta(s);
+    }
+    let mut total_sec = 0i64;
+    let mut num_buf = String::new();
+    for c in s.chars() {
+        if c.is_ascii_digit() {
+            num_buf.push(c);
+        } else if !num_buf.is_empty() {
+            let val: i64 = num_buf.parse().ok()?;
+            num_buf.clear();
+            match c {
+                's' | 'S' => total_sec += val,
+                'm' | 'M' => total_sec += val * 60,
+                'h' | 'H' => total_sec += val * 3600,
+                'd' | 'D' => total_sec += val * 86400,
+                _ => {}
+            }
+        }
+    }
+    if !num_buf.is_empty() && total_sec == 0 {
+        total_sec = num_buf.parse().ok()?;
+    }
+    Some(total_sec)
+}
+
 /// Parse one line of yt-dlp stdout (`--newline --progress`).
 pub fn classify(line: &str) -> Line {
     let t = line.trim();
@@ -119,6 +149,47 @@ pub fn classify(line: &str) -> Line {
         }
     }
 
+    // aria2c progress format: [#2089b0 3.2MiB/14MiB(22%) CN:4 DL:2.5MiB ETA:4s]
+    if t.starts_with("[#") {
+        let mut pct = None;
+        let mut downloaded = None;
+        let mut total = None;
+        let mut speed = None;
+        let mut eta = None;
+
+        if let Some(open) = t.find('(') && let Some(close) = t[open..].find("%)") {
+            let pct_str = &t[open + 1..open + close];
+            pct = pct_str.parse::<f32>().ok();
+        }
+
+        if let Some(slash) = t.find('/') {
+            let start = t[..slash].rfind(' ').map(|i| i + 1).unwrap_or(0);
+            let end = t[slash..].find('(').map(|i| slash + i).unwrap_or(t.len());
+            let d_str = t[start..slash].trim();
+            let t_str = t[slash + 1..end].trim();
+            downloaded = parse_size(d_str);
+            total = parse_size(t_str);
+        }
+
+        if let Some(pos) = t.find("DL:") {
+            let rest = &t[pos + 3..];
+            let end = rest.find([' ', ']', '\r', '\n']).unwrap_or(rest.len());
+            let s_str = rest[..end].trim().trim_end_matches("/s");
+            speed = parse_size(s_str);
+        }
+
+        if let Some(pos) = t.find("ETA:") {
+            let rest = &t[pos + 4..];
+            let end = rest.find([' ', ']', '\r', '\n']).unwrap_or(rest.len());
+            let eta_str = rest[..end].trim();
+            eta = parse_aria_eta(eta_str);
+        }
+
+        if let Some(pct) = pct {
+            return Line::Progress { pct, downloaded, total, speed, eta };
+        }
+    }
+
     // Post-processing phases: [Merger], [ExtractAudio], [EmbedSubtitle]...
     if t.starts_with('[') && let Some(end) = t.find(']') {
         let tag = &t[1..end];
@@ -165,6 +236,20 @@ mod tests {
                 assert_eq!(total, Some((12.34f64 * 1024.0 * 1024.0) as i64));
                 assert_eq!(speed, Some((2.15f64 * 1024.0 * 1024.0) as i64));
                 assert_eq!(eta, Some(3));
+            }
+            other => panic!("wrong: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_aria2_progress_line() {
+        let line = "[#2089b0 3.2MiB/14.0MiB(22%) CN:4 DL:2.5MiB ETA:4s]";
+        match classify(line) {
+            Line::Progress { pct, total, speed, eta, .. } => {
+                assert_eq!(pct, 22.0);
+                assert_eq!(total, Some((14.0f64 * 1024.0 * 1024.0) as i64));
+                assert_eq!(speed, Some((2.5f64 * 1024.0 * 1024.0) as i64));
+                assert_eq!(eta, Some(4));
             }
             other => panic!("wrong: {other:?}"),
         }

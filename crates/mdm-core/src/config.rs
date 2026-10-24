@@ -77,6 +77,8 @@ pub struct Config {
     /// aria2: HTTP user agent for direct downloads. Empty = aria2 default.
     /// Browser-like agents dodge "aria2/*" server bans.
     pub aria2_user_agent: String,
+    /// aria2: custom BitTorrent tracker announce URLs (comma-separated).
+    pub aria2_custom_tracker_url: String,
     /// yt-dlp: cap video height in px for "best" requests. 0 = no cap.
     pub ytdlp_max_height: u32,
     /// yt-dlp: container used when merging separate streams (mkv|mp4|webm).
@@ -89,6 +91,18 @@ pub struct Config {
     pub ytdlp_fragments: u32,
     /// yt-dlp: pack downloaded subtitles into the output file (needs ffmpeg).
     pub ytdlp_embed_subs: bool,
+    /// UI theme mode: "dark" | "light" | "system". Default: "dark".
+    pub theme: String,
+    /// UI accent color hex. Default: "#e8934a" (Amber Orange).
+    pub accent_color: String,
+    /// Floating desktop widget style: "pill" | "card" | "minimalistic". Default: "pill".
+    pub widget_shape: String,
+    /// yt-dlp: extract cookies from an installed browser (chrome|brave|firefox|edge|chromium|opera|vivaldi|safari|"").
+    pub ytdlp_cookies_from_browser: String,
+    /// Desktop notifications enabled (system toast on download complete/failed).
+    pub notifications_enabled: bool,
+    /// Notification sound chime enabled.
+    pub notification_sound: bool,
 }
 
 impl Default for Config {
@@ -122,11 +136,18 @@ impl Default for Config {
             aria2_lowest_speed_limit: 0,
             aria2_bt_max_peers: 128,
             aria2_user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36".into(),
+            aria2_custom_tracker_url: String::new(),
             ytdlp_max_height: 0,
             ytdlp_merge_format: "mkv".into(),
             ytdlp_audio_format: "mp3".into(),
             ytdlp_fragments: 4,
             ytdlp_embed_subs: false,
+            theme: "dark".into(),
+            accent_color: "#e8934a".into(),
+            widget_shape: "pill".into(),
+            ytdlp_cookies_from_browser: "chrome".into(),
+            notifications_enabled: true,
+            notification_sound: true,
         }
     }
 }

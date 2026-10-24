@@ -2,17 +2,19 @@
 
 #[cfg(unix)]
 pub fn kill_tree(pid: u32) {
-    use nix::sys::signal::{killpg, Signal};
+    use nix::sys::signal::{kill, killpg, Signal};
     use nix::unistd::Pid;
     if pid == 0 {
         return;
     }
     // Children are spawned with process_group(0), so pgid == child pid.
-    let pgid = Pid::from_raw(pid as i32);
+    let p = Pid::from_raw(pid as i32);
     // Graceful first so yt-dlp can shut down its external downloader.
-    let _ = killpg(pgid, Signal::SIGINT);
-    std::thread::sleep(std::time::Duration::from_millis(250));
-    let _ = killpg(pgid, Signal::SIGKILL);
+    let _ = killpg(p, Signal::SIGINT);
+    let _ = kill(p, Signal::SIGINT);
+    std::thread::sleep(std::time::Duration::from_millis(150));
+    let _ = killpg(p, Signal::SIGKILL);
+    let _ = kill(p, Signal::SIGKILL);
 }
 
 #[cfg(not(unix))]

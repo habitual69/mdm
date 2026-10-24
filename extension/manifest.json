@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "mDm — Media Download Manager Helper",
+  "short_name": "mDm Helper",
+  "version": "1.0.0",
+  "description": "Download videos, audio, and media from YouTube, Twitter/X, Reddit, TikTok, and all platforms directly with mDm via IDM-style floating video bar.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_title": "mDm — Media Download Manager"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": [
+    "activeTab",
+    "contextMenus",
+    "storage",
+    "notifications",
+    "webRequest",
+    "downloads",
+    "cookies"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:5757/*",
+    "http://localhost:5757/*",
+    "<all_urls>"
+  ]
+}

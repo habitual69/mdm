@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>mdm — Media Download Manager</title>
+<title>mDm — Media Download Manager</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23e8934a'/%3E%3Cpath d='M16 7v11m-5-4l5 5 5-5M8 25h16' stroke='%23161a21' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/static/styles.css">
 </head>
@@ -29,11 +29,137 @@
   </defs>
 </svg>
 
-<div class="app">
+<div class="window-shell">
+  <header id="titlebar" class="titlebar" data-tauri-drag-region>
+    <div class="titlebar-left" data-tauri-drag-region>
+      <svg class="titlebar-ico" viewBox="0 0 120 120"><use href="#mascot"/></svg>
+      <span class="titlebar-title" data-tauri-drag-region>mDm — Media Download Manager</span>
+    </div>
+    <div class="titlebar-center" data-tauri-drag-region>
+      <button type="button" id="tb-widget-btn" class="tb-transfer-btn tb-widget-btn" title="Toggle Floating Speed Widget (Desktop pill)">
+        <svg viewBox="0 0 24 24" style="width: 12px; height: 12px; flex-shrink: 0;"><rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 16l3-4 4 3 4-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Widget</span>
+      </button>
+    </div>
+    <div class="titlebar-controls" id="titlebar-controls" data-tauri-drag-region="false">
+      <button type="button" class="tb-btn" id="tb-min" title="Minimize" aria-label="Minimize" data-tauri-drag-region="false">
+        <svg viewBox="0 0 16 16"><path d="M3 8.5h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+      <button type="button" class="tb-btn" id="tb-max" title="Maximize" aria-label="Maximize" data-tauri-drag-region="false">
+        <svg viewBox="0 0 16 16"><rect x="3.5" y="3.5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+      </button>
+      <button type="button" class="tb-btn tb-close" id="tb-close" title="Close to tray" aria-label="Close to tray" data-tauri-drag-region="false">
+        <svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Flyout menu sheet for active downloads -->
+  <div id="active-sheet" class="active-sheet hidden" role="dialog" aria-label="Current active downloads">
+    <div class="sheet-head">
+      <div class="sheet-title-group">
+        <svg class="sheet-ico" viewBox="0 0 120 120"><use href="#mascot"/></svg>
+        <div>
+          <b>Active Downloads</b>
+          <small id="sheet-stats">0 active</small>
+        </div>
+      </div>
+      <div class="sheet-tools">
+        <button type="button" class="mini-btn" id="sheet-btn-view-all">All Downloads</button>
+        <button type="button" class="icon-btn" id="sheet-btn-close" title="Close sheet">
+          <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="sheet-list" class="sheet-list"></div>
+    <div id="sheet-empty" class="sheet-empty hidden">
+      <p>No active downloads right now.</p>
+    </div>
+  </div>
+
+  <!-- Modal Dialog: Playlist Download Inspector -->
+  <div id="playlist-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="pl-modal-title">
+    <div class="modal-box playlist-modal-box">
+      <div class="modal-head">
+        <div class="modal-title-wrap">
+          <div class="pl-badge">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4zm14 0v6l5-3z"/></svg>
+            <span>Playlist Detected</span>
+          </div>
+          <h3 id="pl-modal-title" class="pl-title">Loading playlist…</h3>
+          <span id="pl-modal-sub" class="pl-sub">Fetching video list…</span>
+        </div>
+        <div class="pl-status-pill tb-transfer-btn" id="pl-status-pill" title="Live playlist transfer speed and progress">
+          <span class="tb-dot" id="pl-dot"></span>
+          <div class="tb-speed-item down">
+            <svg viewBox="0 0 16 16"><path d="M8 2.5v8m-3.5-3.5 3.5 3.5 3.5-3.5M2.5 13.5h11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <b id="pl-down-val">0 B/s</b>
+          </div>
+          <div class="tb-speed-item up">
+            <svg viewBox="0 0 16 16"><path d="M8 13.5v-8m-3.5 3.5 3.5-3.5 3.5 3.5M2.5 2.5h11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <b id="pl-up-val">0 B/s</b>
+          </div>
+          <div class="tb-prog-box">
+            <div class="tb-prog-track"><i id="pl-prog-fill" style="width: 0%"></i></div>
+            <span id="pl-prog-text">0%</span>
+          </div>
+        </div>
+        <button type="button" class="icon-btn" id="pl-btn-close" title="Close dialog">
+          <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+
+      <!-- Loading State -->
+      <div id="pl-loading" class="pl-loading">
+        <div class="pl-spinner"></div>
+        <p>Analyzing playlist &amp; extracting items…</p>
+      </div>
+
+      <!-- Playlist Content (shown when loaded) -->
+      <div id="pl-content" class="pl-content hidden">
+        <div class="pl-toolbar">
+          <div class="pl-select-tools">
+            <label class="pl-check-all-label">
+              <input type="checkbox" id="pl-check-all" checked>
+              <span>Select All</span>
+            </label>
+            <span class="pl-selected-count" id="pl-selected-count">0 / 0 selected</span>
+          </div>
+          <div class="pl-format-tools">
+            <span class="pl-opt-label">Format:</span>
+            <select id="pl-format-select" class="pl-select">
+              <option value="video:best">Video (Best quality + audio)</option>
+              <option value="video:1080p">Video (1080p Full HD)</option>
+              <option value="video:720p">Video (720p HD)</option>
+              <option value="audio:flac">Audio only (FLAC Lossless)</option>
+              <option value="audio:mp3">Audio only (MP3 320k)</option>
+              <option value="audio:m4a">Audio only (M4A / AAC)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="pl-filter-row">
+          <input type="text" id="pl-search-input" class="pl-search" placeholder="Filter videos in playlist…" spellcheck="false">
+        </div>
+
+        <!-- Scrollable List of Videos -->
+        <div class="pl-items-list" id="pl-items-list"></div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="modal-foot">
+        <button type="button" class="btn-cancel" id="pl-btn-cancel">Cancel</button>
+        <button type="button" class="btn-secondary hidden" id="pl-btn-single">Download Single Video Only</button>
+        <button type="button" class="primary" id="pl-btn-download" disabled>Download Selected</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="app">
   <aside class="sidebar" id="sidebar">
     <div class="brand">
       <svg class="tile" viewBox="0 0 120 120"><use href="#mascot"/></svg>
-      <div class="brand-text"><b>mdm</b><small>download manager</small></div>
+      <div class="brand-text"><b>mDm</b><small>Media Download Manager</small></div>
     </div>
 
     <nav class="nav">
@@ -48,21 +174,29 @@
       </button>
 
       <div class="section">Categories</div>
-      <button class="nav-item cat" data-kind="#/downloads/video">
+      <button class="nav-item cat" data-kind="#/downloads/video" title="Video downloads">
         <svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M10.5 9.2 14.8 12l-4.3 2.8z" fill="currentColor"/></svg>
         <span>Video</span>
       </button>
-      <button class="nav-item cat" data-kind="#/downloads/audio">
+      <button class="nav-item cat" data-kind="#/downloads/audio" title="Audio downloads">
         <svg viewBox="0 0 24 24"><path d="M4.5 14a7.5 7.5 0 0 1 15 0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><rect x="3.5" y="13.5" width="4.4" height="6.5" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="16.1" y="13.5" width="4.4" height="6.5" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
         <span>Audio</span>
       </button>
-      <button class="nav-item cat" data-kind="#/downloads/torrents">
+      <button class="nav-item cat" data-kind="#/downloads/compress" title="Compressed archives">
+        <svg viewBox="0 0 24 24"><path d="M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M10 3v18M14 3v18M4 7h6M14 7h6M4 11h6M14 11h6M4 15h6M14 15h6" stroke="currentColor" stroke-width="1.4"/></svg>
+        <span>Compressed</span>
+      </button>
+      <button class="nav-item cat" data-kind="#/downloads/document" title="Documents &amp; reading">
+        <svg viewBox="0 0 24 24"><path d="M6 3.5h7.5L19 9v11.5H6zM13.5 3.7V9H19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 13h6M9 16.5h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <span>Documents</span>
+      </button>
+      <button class="nav-item cat" data-kind="#/downloads/torrents" title="Torrents &amp; magnets">
         <svg viewBox="0 0 24 24"><path d="M6 3.5v7.5a6 6 0 0 0 12 0V3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M6 3.5h4.4V8H6zM13.6 3.5H18V8h-4.4z" fill="currentColor"/></svg>
         <span>Torrents</span>
       </button>
-      <button class="nav-item cat" data-kind="#/downloads/files">
-        <svg viewBox="0 0 24 24"><path d="M6 3.5h7.5L19 9v11.5H6zM13.5 3.7V9H19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <span>Files</span>
+      <button class="nav-item cat" data-kind="#/downloads/misc" title="Miscellaneous files">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span>Miscellaneous</span>
       </button>
 
       <div class="section">App</div>
@@ -130,6 +264,7 @@
                 <input id="out-dir-input" class="hidden" type="text" spellcheck="false">
                 <button type="button" id="out-dir-save" class="mini-btn hidden">Save</button>
               </div>
+              <div class="out-cats-note">Organized by folder: <span>Compress</span> · <span>Videos</span> · <span>Audios</span> · <span>Document</span> · <span>Torrents</span> · <span>Miscellaneous</span></div>
 
               <details class="advance adv-2">
                 <summary>Advanced</summary>
@@ -178,17 +313,58 @@
         </div>
       </div>
 
-      <div class="chips" id="state-chips">
-        <button class="chip on" data-state="all">All <b class="chip-n" id="n-all">0</b></button>
-        <button class="chip" data-state="active">Active <b class="chip-n" id="n-active">0</b></button>
-        <button class="chip" data-state="done">Completed <b class="chip-n" id="n-done">0</b></button>
-        <button class="chip" data-state="failed">Failed <b class="chip-n" id="n-failed">0</b></button>
+      <!-- Live Speed Chart: Download & Upload -->
+      <div id="speed-graph-card" class="speed-graph-card">
+        <div class="speed-graph-head">
+          <div class="speed-graph-title">
+            <svg viewBox="0 0 24 24" class="graph-ico"><path d="M3 3v18h18M7 16l4-6 4 3 6-8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <b>Live Speed Activity</b>
+          </div>
+          <div class="speed-graph-legends">
+            <div class="legend-item legend-down">
+              <span class="legend-bullet"></span>
+              <span class="legend-label">Download:</span>
+              <b id="graph-down-cur">0 B/s</b>
+              <small id="graph-down-peak" class="legend-peak">peak 0 B/s</small>
+            </div>
+            <div class="legend-item legend-up">
+              <span class="legend-bullet"></span>
+              <span class="legend-label">Upload:</span>
+              <b id="graph-up-cur">0 B/s</b>
+              <small id="graph-up-peak" class="legend-peak">peak 0 B/s</small>
+            </div>
+          </div>
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="speed-canvas" class="speed-canvas" height="140"></canvas>
+        </div>
+      </div>
+
+      <div class="dl-filter-row">
+        <div class="chips" id="state-chips">
+          <button class="chip on" data-state="all">All <b class="chip-n" id="n-all">0</b></button>
+          <button class="chip" data-state="active">Active <b class="chip-n" id="n-active">0</b></button>
+          <button class="chip" data-state="done">Completed <b class="chip-n" id="n-done">0</b></button>
+          <button class="chip" data-state="failed">Failed <b class="chip-n" id="n-failed">0</b></button>
+        </div>
+        <div class="bulk-actions" id="bulk-actions">
+          <button type="button" class="btn-bulk" id="btn-resume-all" title="Resume all paused and failed downloads">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M8 5.5v13l10-6.5z"/></svg>
+            <span>Resume All</span>
+          </button>
+          <button type="button" class="btn-bulk" id="btn-pause-all" title="Pause all active downloads">
+            <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 5.5v13M15 5.5v13"/></svg>
+            <span>Pause All</span>
+          </button>
+        </div>
       </div>
       <div id="dl-summary" class="dl-summary hidden"></div>
       <div id="kind-note" class="kind-note hidden"></div>
 
-      <div id="cards" class="cards"></div>
-      <div id="empty" class="empty hidden">Nothing here yet.</div>
+      <div class="dl-scroll-area" id="dl-scroll-area">
+        <div id="cards" class="cards"></div>
+        <div id="empty" class="empty hidden">Nothing here yet.</div>
+      </div>
 
       <div id="dl-footer" class="dl-footer hidden">
         <span id="dl-footer-text">—</span>
@@ -199,248 +375,582 @@
 
     <!-- Settings: download defaults -->
     <section id="view-settings" class="view" hidden>
-      <div class="head-row">
-        <h2>Settings</h2>
+      <div class="settings-wrap">
+        <div class="settings-header">
+          <div class="settings-title-group">
+            <div class="settings-title-row">
+              <h2>Settings</h2>
+              <span id="settings-dirty" class="badge-dirty hidden">Unsaved changes</span>
+            </div>
+            <p class="settings-sub">Defaults for new downloads. Stored in <code>~/.local/share/mdm/config.toml</code></p>
+          </div>
+          <div class="settings-actions">
+            <span id="settings-saved" class="saved-hint hidden">Saved &#10003;</span>
+            <button type="submit" form="settings-form" class="primary" id="settings-save">Save</button>
+          </div>
+        </div>
+
+        <div class="settings-tabs" id="settings-chips" role="tablist" aria-label="Settings categories">
+          <button type="button" class="settings-tab on" data-cat="all" role="tab" aria-selected="true" title="All settings">
+            <svg viewBox="0 0 24 24" class="tab-ico"><rect x="3" y="3" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="3" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="14" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="14" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+            <span>All</span>
+          </button>
+          <button type="button" class="settings-tab" data-cat="general" role="tab" aria-selected="false" title="Storage &amp; Queue settings">
+            <svg viewBox="0 0 24 24" class="tab-ico"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+            <span>General</span>
+          </button>
+          <button type="button" class="settings-tab" data-cat="network" role="tab" aria-selected="false" title="Network &amp; BitTorrent settings">
+            <svg viewBox="0 0 24 24" class="tab-ico"><path d="M3 9h18M3 15h7a3 3 0 0 0 6 0h5M4 5v14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            <span>Network &amp; Torrents</span>
+          </button>
+          <button type="button" class="settings-tab" data-cat="aria2" role="tab" aria-selected="false" title="aria2 multi-connection download engine">
+            <svg viewBox="0 0 24 24" class="tab-ico"><path d="M12 3v10m0 0 4-4m-4 4-4-4M4 17.5h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>aria2 Engine</span>
+          </button>
+          <button type="button" class="settings-tab" data-cat="media" role="tab" aria-selected="false" title="Media &amp; yt-dlp stream extraction">
+            <svg viewBox="0 0 24 24" class="tab-ico"><path d="M10 15V8l6-3v10m-6 4a3 3 0 1 1-6 0 3 3 0 0 1 6 0m6 0a3 3 0 1 1-6 0 3 3 0 0 1 6 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+            <span>Media &amp; yt-dlp</span>
+          </button>
+          <button type="button" class="settings-tab" data-cat="appearance" role="tab" aria-selected="false" title="Appearance, theme &amp; floating widget style">
+            <svg viewBox="0 0 24 24" class="tab-ico"><path d="M12 21a9 9 0 1 0 0-18c2.5 0 4.7 1 6.3 2.7l.7.8a9 9 0 0 1 2 5.5c0 2.2-1.8 4-4 4h-2a2 2 0 0 0-2 2c0 .6.2 1.1.6 1.5l.4.5c.6.6 1 1.4 1 2.3 0 2.2-1.8 4-4 4Z" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+            <span>Appearance</span>
+          </button>
+        </div>
+
+        <form id="settings-form" class="settings-grid">
+          <input type="hidden" id="set-theme" value="dark">
+          <input type="hidden" id="set-accent-color" value="#e8934a">
+          <input type="hidden" id="set-widget-shape" value="pill">
+          <!-- Card: Appearance (Theme, Named Colors, Widget Style & Preview) -->
+          <div class="settings-card span-full" data-category="appearance">
+            <div class="card-head">
+              <svg viewBox="0 0 24 24" class="card-ico"><path d="M12 21a9 9 0 1 0 0-18c2.5 0 4.7 1 6.3 2.7l.7.8a9 9 0 0 1 2 5.5c0 2.2-1.8 4-4 4h-2a2 2 0 0 0-2 2c0 .6.2 1.1.6 1.5l.4.5c.6.6 1 1.4 1 2.3 0 2.2-1.8 4-4 4Z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+              <div class="card-title-wrap">
+                <h3>Appearance &amp; Widget</h3>
+                <span class="card-desc">Color themes, accent styling, and desktop floating widget customization</span>
+              </div>
+            </div>
+
+            <!-- Theme mode selector -->
+            <div class="appearance-section">
+              <div class="app-sec-head">
+                <span class="app-sec-title">Theme Mode</span>
+                <span class="field-note">Choose interface luminance (Light, Dark, or System automatic)</span>
+              </div>
+              <div class="theme-mode-row" id="theme-mode-chips">
+                <button type="button" class="theme-chip" data-theme-val="light">
+                  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41m14.14-14.14-1.41 1.41" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                  <span>Light</span>
+                </button>
+                <button type="button" class="theme-chip on" data-theme-val="dark">
+                  <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span>Dark</span>
+                </button>
+                <button type="button" class="theme-chip" data-theme-val="system">
+                  <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 21h8m-4-4v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                  <span>System</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Accent Color Selector -->
+            <div class="appearance-section">
+              <div class="app-sec-head">
+                <div class="app-sec-title-row">
+                  <span class="app-sec-title">Accent Color</span>
+                  <span class="color-badge" id="color-name-badge">Amber Orange (#e8934a)</span>
+                </div>
+                <span class="field-note">Highlight color for buttons, progress tracks, and speed activity curves</span>
+              </div>
+              <div class="color-palette-row" id="color-palette">
+                <!-- Curated named colors -->
+                <button type="button" class="color-swatch on" data-color="#e8934a" data-name="Amber Orange" style="--c: #e8934a;" title="Amber Orange (#e8934a)"></button>
+                <button type="button" class="color-swatch" data-color="#10b981" data-name="Emerald Green" style="--c: #10b981;" title="Emerald Green (#10b981)"></button>
+                <button type="button" class="color-swatch" data-color="#3b82f6" data-name="Electric Blue" style="--c: #3b82f6;" title="Electric Blue (#3b82f6)"></button>
+                <button type="button" class="color-swatch" data-color="#8b5cf6" data-name="Violet Purple" style="--c: #8b5cf6;" title="Violet Purple (#8b5cf6)"></button>
+                <button type="button" class="color-swatch" data-color="#ef4444" data-name="Crimson Ruby" style="--c: #ef4444;" title="Crimson Ruby (#ef4444)"></button>
+                <button type="button" class="color-swatch" data-color="#ec4899" data-name="Rose Pink" style="--c: #ec4899;" title="Rose Pink (#ec4899)"></button>
+                <button type="button" class="color-swatch" data-color="#f59e0b" data-name="Golden Sunset" style="--c: #f59e0b;" title="Golden Sunset (#f59e0b)"></button>
+                <button type="button" class="color-swatch" data-color="#06b6d4" data-name="Cyan Teal" style="--c: #06b6d4;" title="Cyan Teal (#06b6d4)"></button>
+                <!-- Custom Hex Picker -->
+                <label class="custom-color-btn" title="Choose custom color">
+                  <input type="color" id="custom-color-input" value="#e8934a">
+                  <span>Custom…</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Widget Shape & Live Preview -->
+            <div class="appearance-section">
+              <div class="app-sec-head">
+                <span class="app-sec-title">Floating Widget Shape &amp; Live Preview</span>
+                <span class="field-note">Desktop speed widget style: pill capsule, rectangular card, or minimal badge</span>
+              </div>
+              <div class="widget-shape-row" id="widget-shape-chips">
+                <button type="button" class="shape-chip on" data-shape="pill">
+                  <svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="8" rx="4" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                  <span>Pill</span>
+                </button>
+                <button type="button" class="shape-chip" data-shape="card">
+                  <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 10h16M7 15l3-2 3 3 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span>Card</span>
+                </button>
+                <button type="button" class="shape-chip" data-shape="minimalistic">
+                  <svg viewBox="0 0 24 24"><rect x="4" y="9" width="16" height="6" rx="3" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                  <span>Minimalistic</span>
+                </button>
+              </div>
+
+              <!-- Interactive Live Preview Box -->
+              <div class="widget-preview-wrap">
+                <div class="preview-label">Live Preview</div>
+                <div class="preview-stage" id="preview-stage">
+                  <div class="preview-widget widget is-pill" id="preview-widget">
+                    <!-- Pill view -->
+                    <div class="pw-pill-content">
+                      <span class="pw-dot active"></span>
+                      <div class="pw-speeds">
+                        <span class="pw-sp down">↓ 14.8 MB/s</span>
+                        <span class="pw-sp up">↑ 820 KB/s</span>
+                      </div>
+                      <div class="pw-bar"><i style="width: 68%;"></i></div>
+                      <span class="pw-pct">68%</span>
+                    </div>
+                    <!-- Minimalistic view (hidden in pill/card mode) -->
+                    <div class="pw-mini-content hidden">
+                      <span class="pw-dot active"></span>
+                      <span class="pw-sp down">↓ 14.8 MB/s</span>
+                      <span class="pw-mini-pct">68%</span>
+                    </div>
+                    <!-- Card view (hidden in pill mode) -->
+                    <div class="pw-card-content hidden">
+                      <div class="pw-card-header">
+                        <div class="pw-card-title">
+                          <svg class="pw-mascot" viewBox="0 0 120 120"><use href="#mascot"/></svg>
+                          <b>mDm Transfer</b>
+                        </div>
+                        <span class="pw-card-badge">2 active</span>
+                      </div>
+                      <div class="pw-card-stats">
+                        <div class="pw-stat-col">
+                          <small>Download</small>
+                          <b class="pw-down">↓ 14.8 MB/s</b>
+                        </div>
+                        <div class="pw-stat-col">
+                          <small>Upload</small>
+                          <b class="pw-up">↑ 820 KB/s</b>
+                        </div>
+                        <div class="pw-stat-col">
+                          <small>Progress</small>
+                          <b>68%</b>
+                        </div>
+                      </div>
+                      <div class="pw-card-track"><i style="width: 68%;"></i></div>
+                    </div>
+                    <!-- Shared Live Sparkline (Card only) -->
+                    <canvas class="pw-spark hidden" id="pw-spark" width="280" height="38"></canvas>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Card 1: Storage & Queue -->
+          <div class="settings-card" data-category="general">
+            <div class="card-head">
+              <svg viewBox="0 0 24 24" class="card-ico"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+              <div class="card-title-wrap">
+                <h3>Storage &amp; Queue</h3>
+                <span class="card-desc">Save location and concurrent job limits</span>
+              </div>
+            </div>
+
+            <label class="field wide">
+              <span class="field-label">Output folder</span>
+              <input id="set-output-dir" type="text" spellcheck="false" placeholder="~/Downloads/mdm">
+              <small class="field-note">Finished links and torrents land here. Applies to new downloads.</small>
+            </label>
+
+            <div class="field-grid-2">
+              <label class="field">
+                <span class="field-label">Max parallel downloads</span>
+                <div class="stepper-row">
+                  <button type="button" class="stbtn" data-target="set-max-concurrent" tabindex="-1" aria-label="Decrease max concurrent downloads">&#8722;</button>
+                  <input id="set-max-concurrent" type="number" min="1" max="16" step="1">
+                  <button type="button" class="stbtn" data-target="set-max-concurrent" tabindex="-1" aria-label="Increase max concurrent downloads">&#43;</button>
+                </div>
+                <small class="field-note">Jobs running at once. Others wait in queue.</small>
+              </label>
+
+              <label class="field">
+                <span class="field-label">Retries per download</span>
+                <div class="stepper-row">
+                  <button type="button" class="stbtn" data-target="set-max-retries" tabindex="-1" aria-label="Decrease retries">&#8722;</button>
+                  <input id="set-max-retries" type="number" min="0" max="10" step="1">
+                  <button type="button" class="stbtn" data-target="set-max-retries" tabindex="-1" aria-label="Increase retries">&#43;</button>
+                </div>
+                <small class="field-note">0 = fail fast. Higher rides out flaky links.</small>
+              </label>
+            </div>
+
+            <div class="toggle-list" style="margin-top: 14px;">
+              <label class="toggle-row">
+                <div class="toggle-meta">
+                  <span class="toggle-title">Desktop system notifications</span>
+                  <small class="field-note">Show native OS toast banner on download finish or failure</small>
+                </div>
+                <input type="checkbox" id="set-notifications-enabled" class="toggle-input" checked>
+                <span class="toggle-slider"></span>
+              </label>
+              <label class="toggle-row">
+                <div class="toggle-meta">
+                  <span class="toggle-title">Notification sound</span>
+                  <small class="field-note">Play subtle audio alert for completed or failed items</small>
+                </div>
+                <input type="checkbox" id="set-notification-sound" class="toggle-input" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Card 2: Network & Torrents -->
+          <div class="settings-card" data-category="network">
+            <div class="card-head">
+              <svg viewBox="0 0 24 24" class="card-ico"><path d="M3 9h18M3 15h7a3 3 0 0 0 6 0h5M4 5v14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              <div class="card-title-wrap">
+                <h3>Network &amp; Torrents</h3>
+                <span class="card-desc">Bandwidth limits, proxy, and torrent seeding</span>
+              </div>
+            </div>
+
+            <div class="field-grid-2">
+              <label class="field">
+                <span class="field-label">Speed limit</span>
+                <input id="set-speed-limit" type="text" spellcheck="false" placeholder="e.g. 5M, 500K">
+                <small class="field-note">Overall cap for all downloads. Empty = no limit.</small>
+              </label>
+
+              <label class="field">
+                <span class="field-label">Proxy</span>
+                <input id="set-proxy" type="text" spellcheck="false" placeholder="http://127.0.0.1:8080">
+                <small class="field-note">HTTP or SOCKS5 URL. Empty = direct.</small>
+              </label>
+            </div>
+
+            <label class="field">
+              <span class="field-label">Keep seeding after finish</span>
+              <div class="stepper-row">
+                <button type="button" class="stbtn" data-target="set-seed-minutes" tabindex="-1" aria-label="Decrease seed minutes">&#8722;</button>
+                <input id="set-seed-minutes" type="number" min="0" max="10080" step="1">
+                <button type="button" class="stbtn" data-target="set-seed-minutes" tabindex="-1" aria-label="Increase seed minutes">&#43;</button>
+              </div>
+              <small class="field-note">Minutes to seed once torrent completes. 0 stops immediately.</small>
+            </label>
+          </div>
+
+          <!-- Card 3: aria2 Engine (spans 2 columns on wide screens) -->
+          <div class="settings-card span-full" data-category="aria2">
+            <div class="card-head">
+              <svg viewBox="0 0 24 24" class="card-ico"><path d="M12 3v10m0 0 4-4m-4 4-4-4M4 17.5h16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <div class="card-title-wrap">
+                <h3>aria2 Engine</h3>
+                <span class="card-desc">Multi-connection acceleration, cache tuning, and BitTorrent settings</span>
+              </div>
+            </div>
+
+            <div class="toggle-group">
+              <label class="toggle-row">
+                <div class="toggle-meta">
+                  <span class="toggle-title">Offload yt-dlp downloads to aria2c</span>
+                  <small class="field-note">Segmented multi-connection reads. Faster on big files and keeps yt-dlp lightweight.</small>
+                </div>
+                <input type="checkbox" id="set-aria2-offload" class="toggle-input">
+                <span class="toggle-slider"></span>
+              </label>
+
+              <label class="toggle-row">
+                <div class="toggle-meta">
+                  <span class="toggle-title">Automatic yt-dlp fallback</span>
+                  <small class="field-note">If aria2 offload fails, automatically retry using yt-dlp's native downloader.</small>
+                </div>
+                <input type="checkbox" id="set-aria2-fallback" class="toggle-input">
+                <span class="toggle-slider"></span>
+              </label>
+
+              <label class="toggle-row">
+                <div class="toggle-meta">
+                  <span class="toggle-title">Pre-allocate file space (falloc)</span>
+                  <small class="field-note">Reduces filesystem fragmentation on HDDs. Leave off for SSDs.</small>
+                </div>
+                <input type="checkbox" id="set-aria2-prealloc" class="toggle-input">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div class="subsection">
+              <span>Transfer tuning</span>
+            </div>
+            <div class="field-grid-4">
+              <label class="field">
+                <span class="field-label">Connections / server</span>
+                <div class="stepper-row">
+                  <button type="button" class="stbtn" data-target="set-aria2-conn" tabindex="-1">&#8722;</button>
+                  <input id="set-aria2-conn" type="number" min="1" max="16" step="1">
+                  <button type="button" class="stbtn" data-target="set-aria2-conn" tabindex="-1">&#43;</button>
+                </div>
+                <small class="field-note">Max connections per host.</small>
+              </label>
+
+              <label class="field">
+                <span class="field-label">Segments / download</span>
+                <div class="stepper-row">
+                  <button type="button" class="stbtn" data-target="set-aria2-split" tabindex="-1">&#8722;</button>
+                  <input id="set-aria2-split" type="number" min="1" max="16" step="1">
+                  <button type="button" class="stbtn" data-target="set-aria2-split" tabindex="-1">&#43;</button>
+                </div>
+                <small class="field-note">Split count per file.</small>
+              </label>
+
+              <label class="field">
+                <span class="field-label">Min split size (MB)</span>
+                <div class="stepper-row">
+                  <button type="button" class="stbtn" data-target="set-aria2-minsplit" tabindex="-1">&#8722;</button>
+                  <input id="set-aria2-minsplit" type="number" min="1" max="1024" step="1">
+                  <button type="button" class="stbtn" data-target="set-aria2-minsplit" tabindex="-1">&#43;</button>
+                </div>
+                <small class="field-note">Below this, single link.</small>
+              </label>
+
+              <label class="field">
+                <span class="field-label">Disk cache (MB)</span>
+                <div class="stepper-row">
+                  <button type="button" class="stbtn" data-target="set-aria2-cache" tabindex="-1">&#8722;</button>
+                  <input id="set-aria2-cache" type="number" min="0" max="1024" step="32">
+                  <button type="button" class="stbtn" data-target="set-aria2-cache" tabindex="-1">&#43;</button>
+                </div>
+                <small class="field-note">RAM buffer. 0 = off.</small>
+              </label>
+            </div>
+
+            <div class="subsection">
+              <span>Reliability &amp; limits</span>
+            </div>
+            <div class="field-grid-4">
+              <label class="field">
+                <span class="field-label">Connect timeout (s)</span>
+                <div class="stepper-row">
+                  <button type="button" class="stbtn" data-target="set-aria2-timeout" tabindex="-1">&#8722;</button>
+                  <input id="set-aria2-timeout" type="number" min="5" max="120" step="5">
+                  <button type="button" class="stbtn" data-target="set-aria2-timeout" tabindex="-1">&#43;</button>
+                </div>
+                <small class="field-note">Stalled link timeout.</small>
+              </label>
+
+              <label class="field">
+                <span class="field-label">Retries per transfer</span>
+                <div class="stepper-row">
+                  <button type="button" class="stbtn" data-target="set-aria2-tries" tabindex="-1">&#8722;</button>
+                  <input id="set-aria2-tries" type="number" min="0" max="20" step="1">
+                  <button type="button" class="stbtn" data-target="set-aria2-tries" tabindex="-1">&#43;</button>
+                </div>
+                <small class="field-note">0 = keep retrying.</small>
+              </label>
+
+              <label class="field">
+                <span class="field-label">Retry wait (s)</span>
+                <div class="stepper-row">
+                  <button type="button" class="stbtn" data-target="set-aria2-retrywait" tabindex="-1">&#8722;</button>
+                  <input id="set-aria2-retrywait" type="number" min="0" max="60" step="5">
+                  <button type="button" class="stbtn" data-target="set-aria2-retrywait" tabindex="-1">&#43;</button>
+                </div>
+                <small class="field-note">Pause between tries.</small>
+              </label>
+
+              <label class="field">
+                <span class="field-label">Slow speed limit (K/s)</span>
+                <div class="stepper-row">
+                  <button type="button" class="stbtn" data-target="set-aria2-slowlimit" tabindex="-1">&#8722;</button>
+                  <input id="set-aria2-slowlimit" type="number" min="0" max="10240" step="64">
+                  <button type="button" class="stbtn" data-target="set-aria2-slowlimit" tabindex="-1">&#43;</button>
+                </div>
+                <small class="field-note">Drop slow links. 0 = off.</small>
+              </label>
+            </div>
+
+            <div class="subsection">
+              <span>BitTorrent &amp; Identity</span>
+            </div>
+            <div class="field-grid-2">
+              <label class="field">
+                <span class="field-label">Max BitTorrent peers</span>
+                <div class="stepper-row">
+                  <button type="button" class="stbtn" data-target="set-aria2-btpeers" tabindex="-1">&#8722;</button>
+                  <input id="set-aria2-btpeers" type="number" min="0" max="500" step="16">
+                  <button type="button" class="stbtn" data-target="set-aria2-btpeers" tabindex="-1">&#43;</button>
+                </div>
+                <small class="field-note">Peers connected per torrent. 0 = unlimited.</small>
+              </label>
+
+              <label class="field">
+                <span class="field-label">Browser user agent</span>
+                <input id="set-aria2-ua" type="text" spellcheck="false" placeholder="Mozilla/5.0 (Windows NT 10.0; ...)">
+                <small class="field-note">Masks aria2 fingerprint on direct links. Empty = default.</small>
+              </label>
+            </div>
+
+            <label class="field wide">
+              <span class="field-label">Custom BitTorrent tracker URLs (CUSTOM_TRACKER_URL)</span>
+              <input id="set-aria2-tracker" type="text" spellcheck="false" placeholder="udp://tracker.opentrackr.org:1337/announce, http://tracker.openbittorrent.com:80/announce">
+              <small class="field-note">Extra announce tracker URLs (comma-separated). Sent to aria2c (<code>--bt-tracker</code>) to boost peer discovery &amp; download speeds.</small>
+            </label>
+          </div>
+
+          <!-- Card 4: yt-dlp Engine -->
+          <div class="settings-card" data-category="media">
+            <div class="card-head">
+              <svg viewBox="0 0 24 24" class="card-ico"><path d="M10 15V8l6-3v10m-6 4a3 3 0 1 1-6 0 3 3 0 0 1 6 0m6 0a3 3 0 1 1-6 0 3 3 0 0 1 6 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+              <div class="card-title-wrap">
+                <h3>yt-dlp Engine</h3>
+                <span class="card-desc">Resolution limits, containers, and format presets</span>
+              </div>
+            </div>
+
+            <div class="field-grid-2">
+              <label class="field">
+                <span class="field-label">Max video quality</span>
+                <select id="set-ytdlp-quality">
+                  <option value="0">Best available</option>
+                  <option value="2160">Up to 2160p (4K)</option>
+                  <option value="1440">Up to 1440p (2K)</option>
+                  <option value="1080">Up to 1080p (Full HD)</option>
+                  <option value="720">Up to 720p (HD)</option>
+                  <option value="480">Up to 480p</option>
+                  <option value="360">Up to 360p</option>
+                </select>
+                <small class="field-note">Caps "best" streams; never exceeds this height.</small>
+              </label>
+
+              <label class="field">
+                <span class="field-label">Merge into container</span>
+                <select id="set-ytdlp-merge">
+                  <option value="mkv">MKV (keeps any codecs)</option>
+                  <option value="mp4">MP4</option>
+                  <option value="webm">WebM</option>
+                </select>
+                <small class="field-note">Used when video + audio are separate streams.</small>
+              </label>
+
+              <label class="field">
+                <span class="field-label">Browser Cookies</span>
+                <select id="set-ytdlp-cookies">
+                  <option value="chrome">Google Chrome (Default)</option>
+                  <option value="brave">Brave Browser</option>
+                  <option value="firefox">Mozilla Firefox</option>
+                  <option value="edge">Microsoft Edge</option>
+                  <option value="chromium">Chromium</option>
+                  <option value="opera">Opera</option>
+                  <option value="vivaldi">Vivaldi</option>
+                  <option value="">None / Extension Only</option>
+                </select>
+                <small class="field-note">Passes authenticated sessions to bypass login walls (X/Twitter, Instagram, YouTube).</small>
+              </label>
+            </div>
+
+            <div class="field-grid-2">
+              <label class="field">
+                <span class="field-label">Audio format</span>
+                <select id="set-ytdlp-audio">
+                  <option value="mp3">MP3</option>
+                  <option value="m4a">M4A (AAC)</option>
+                  <option value="opus">Opus</option>
+                  <option value="flac">FLAC (lossless)</option>
+                  <option value="wav">WAV</option>
+                  <option value="vorbis">Vorbis</option>
+                  <option value="best">Original codec (no convert)</option>
+                </select>
+                <small class="field-note">Conversion target for audio-only downloads.</small>
+              </label>
+
+              <label class="field">
+                <span class="field-label">Fragment downloads</span>
+                <div class="stepper-row">
+                  <button type="button" class="stbtn" data-target="set-ytdlp-frags" tabindex="-1">&#8722;</button>
+                  <input id="set-ytdlp-frags" type="number" min="1" max="16" step="1">
+                  <button type="button" class="stbtn" data-target="set-ytdlp-frags" tabindex="-1">&#43;</button>
+                </div>
+                <small class="field-note">Parallel chunks yt-dlp's downloader fetches.</small>
+              </label>
+            </div>
+          </div>
+
+          <!-- Card 5: Media Extras & Metadata -->
+          <div class="settings-card" data-category="media">
+            <div class="card-head">
+              <svg viewBox="0 0 24 24" class="card-ico"><path d="M21 3H3a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1ZM7 21h10M9 7v6m0 0 2 2m-2-2-2 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <div class="card-title-wrap">
+                <h3>Media Extras &amp; Metadata</h3>
+                <span class="card-desc">Subtitles, chapter markers, and cover artwork</span>
+              </div>
+            </div>
+
+            <div class="toggle-group">
+              <label class="toggle-row">
+                <div class="toggle-meta">
+                  <span class="toggle-title">Download subtitles</span>
+                  <small class="field-note">Save subtitle files alongside media</small>
+                </div>
+                <input type="checkbox" id="set-write-subs" class="toggle-input">
+                <span class="toggle-slider"></span>
+              </label>
+
+              <label class="toggle-row">
+                <div class="toggle-meta">
+                  <span class="toggle-title">Include auto-generated captions</span>
+                  <small class="field-note">Fallback to machine captions when none available</small>
+                </div>
+                <input type="checkbox" id="set-write-auto-subs" class="toggle-input">
+                <span class="toggle-slider"></span>
+              </label>
+
+              <label class="toggle-row">
+                <div class="toggle-meta">
+                  <span class="toggle-title">Embed subtitles into the file</span>
+                  <small class="field-note">Mux subtitles into the media container</small>
+                </div>
+                <input type="checkbox" id="set-ytdlp-embed-subs" class="toggle-input">
+                <span class="toggle-slider"></span>
+              </label>
+
+              <label class="toggle-row">
+                <div class="toggle-meta">
+                  <span class="toggle-title">Embed metadata &amp; chapters</span>
+                  <small class="field-note">Write title, artist, description, and chapter marks</small>
+                </div>
+                <input type="checkbox" id="set-embed-metadata" class="toggle-input">
+                <span class="toggle-slider"></span>
+              </label>
+
+              <label class="toggle-row">
+                <div class="toggle-meta">
+                  <span class="toggle-title">Embed thumbnail as cover art</span>
+                  <small class="field-note">Set media artwork from video thumbnail</small>
+                </div>
+                <input type="checkbox" id="set-embed-thumbnail" class="toggle-input">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div class="note-box">
+              <svg viewBox="0 0 24 24" class="note-ico"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              <span>Applies to yt-dlp downloads. Embedding features require FFmpeg.</span>
+            </div>
+          </div>
+        </form>
       </div>
-      <p class="settings-sub">Defaults for new downloads. Stored in <code>~/.local/share/mdm/config.toml</code>.</p>
-      <form id="settings-form" class="settings-grid">
-        <div class="settings-card span-2">
-          <div class="card-head">
-            <svg viewBox="0 0 24 24" class="card-ico"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
-            <h3>Where files go</h3>
-          </div>
-          <label class="field wide">
-            <span>Output folder</span>
-            <input id="set-output-dir" type="text" spellcheck="false">
-            <small class="field-note">Finished links and torrents land here. Applies to new downloads.</small>
-          </label>
-        </div>
-        <div class="settings-card">
-          <div class="card-head">
-            <svg viewBox="0 0 24 24" class="card-ico"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
-            <h3>Performance</h3>
-          </div>
-          <label class="field">
-            <span>Max parallel downloads</span>
-            <div class="stepper-row">
-              <button type="button" class="stbtn" data-target="set-max-concurrent" tabindex="-1">&#8722;</button>
-              <input id="set-max-concurrent" type="number" min="1" max="16" step="1">
-              <button type="button" class="stbtn" data-target="set-max-concurrent" tabindex="-1">&#43;</button>
-            </div>
-            <small class="field-note">Jobs that run at once. The rest wait in the queue.</small>
-          </label>
-          <label class="field">
-            <span>Retries per download</span>
-            <div class="stepper-row">
-              <button type="button" class="stbtn" data-target="set-max-retries" tabindex="-1">&#8722;</button>
-              <input id="set-max-retries" type="number" min="0" max="10" step="1">
-              <button type="button" class="stbtn" data-target="set-max-retries" tabindex="-1">&#43;</button>
-            </div>
-            <small class="field-note">0 = fail fast. More retries ride out flaky sources.</small>
-          </label>
-        </div>
-        <div class="settings-card">
-          <div class="card-head">
-            <svg viewBox="0 0 24 24" class="card-ico"><path d="m12 12 7-7M8.5 8.5 3 14l7 7 5.5-5.5M3 21l3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="18" cy="5" r="1.6" fill="currentColor"/><circle cx="6" cy="18" r="1.6" fill="currentColor"/></svg>
-            <h3>Torrents</h3>
-          </div>
-          <label class="field">
-            <span>Keep seeding after finish</span>
-            <div class="stepper-row">
-              <button type="button" class="stbtn" data-target="set-seed-minutes" tabindex="-1">&#8722;</button>
-              <input id="set-seed-minutes" type="number" min="0" max="10080" step="1">
-              <button type="button" class="stbtn" data-target="set-seed-minutes" tabindex="-1">&plus;</button>
-            </div>
-            <small class="field-note">Minutes to seed once a torrent finishes. 0 stops right away.</small>
-          </label>
-        </div>
-        <div class="settings-card">
-          <div class="card-head">
-            <svg viewBox="0 0 24 24" class="card-ico"><path d="M12 3v10m0 0 4-4m-4 4-4-4M4 17.5h16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <h3>aria2 engine</h3>
-          </div>
-          <label class="check"><input type="checkbox" id="set-aria2-offload"> <span>Offload yt-dlp downloads to aria2c</span></label>
-          <label class="check"><input type="checkbox" id="set-aria2-fallback"> <span>If aria2 offload fails, retry with yt-dlp's downloader</span></label>
-          <small class="field-note">Aria2 fetches media with segmented, multi-connection reads. Faster on big files and keeps yt-dlp light.</small>
-          <h4 class="subsection">HTTP transfers</h4>
-          <label class="field">
-            <span>Connections per server</span>
-            <div class="stepper-row">
-              <button type="button" class="stbtn" data-target="set-aria2-conn" tabindex="-1">&#8722;</button>
-              <input id="set-aria2-conn" type="number" min="1" max="16" step="1">
-              <button type="button" class="stbtn" data-target="set-aria2-conn" tabindex="-1">&#43;</button>
-            </div>
-          </label>
-          <label class="field">
-            <span>Segments per download</span>
-            <div class="stepper-row">
-              <button type="button" class="stbtn" data-target="set-aria2-split" tabindex="-1">&#8722;</button>
-              <input id="set-aria2-split" type="number" min="1" max="16" step="1">
-              <button type="button" class="stbtn" data-target="set-aria2-split" tabindex="-1">&#43;</button>
-            </div>
-          </label>
-          <label class="field">
-            <span>Connect timeout</span>
-            <div class="stepper-row">
-              <button type="button" class="stbtn" data-target="set-aria2-timeout" tabindex="-1">&#8722;</button>
-              <input id="set-aria2-timeout" type="number" min="5" max="120" step="5">
-              <button type="button" class="stbtn" data-target="set-aria2-timeout" tabindex="-1">&#43;</button>
-            </div>
-            <small class="field-note">Seconds before a stalled connection gives up. Applies to new downloads.</small>
-          </label>
-          <label class="field">
-            <span>Disk cache</span>
-            <div class="stepper-row">
-              <button type="button" class="stbtn" data-target="set-aria2-cache" tabindex="-1">&#8722;</button>
-              <input id="set-aria2-cache" type="number" min="0" max="1024" step="32">
-              <button type="button" class="stbtn" data-target="set-aria2-cache" tabindex="-1">&#43;</button>
-            </div>
-            <small class="field-note">MB buffered in RAM before writing to disk. 64M helps slow drives; 0 = off.</small>
-          </label>
-          <label class="check"><input type="checkbox" id="set-aria2-prealloc"> <span>Pre-allocate file space (falloc)</span></label>
-          <small class="field-note">Fewer fragments on spinning HDDs. Leave off for SSDs.</small>
-          <label class="field">
-            <span>Min split size</span>
-            <div class="stepper-row">
-              <button type="button" class="stbtn" data-target="set-aria2-minsplit" tabindex="-1">&#8722;</button>
-              <input id="set-aria2-minsplit" type="number" min="1" max="1024" step="1">
-              <button type="button" class="stbtn" data-target="set-aria2-minsplit" tabindex="-1">&#43;</button>
-            </div>
-            <small class="field-note">MB. Files below this use a single connection; smaller = more segments.</small>
-          </label>
-          <h4 class="subsection">Reliability &amp; speed</h4>
-          <label class="field">
-            <span>Retries per transfer</span>
-            <div class="stepper-row">
-              <button type="button" class="stbtn" data-target="set-aria2-tries" tabindex="-1">&#8722;</button>
-              <input id="set-aria2-tries" type="number" min="0" max="20" step="1">
-              <button type="button" class="stbtn" data-target="set-aria2-tries" tabindex="-1">&#43;</button>
-            </div>
-            <small class="field-note">0 = keep retrying. High values delay the automatic fallback.</small>
-          </label>
-          <label class="field">
-            <span>Retry wait</span>
-            <div class="stepper-row">
-              <button type="button" class="stbtn" data-target="set-aria2-retrywait" tabindex="-1">&#8722;</button>
-              <input id="set-aria2-retrywait" type="number" min="0" max="60" step="5">
-              <button type="button" class="stbtn" data-target="set-aria2-retrywait" tabindex="-1">&#43;</button>
-            </div>
-            <small class="field-note">Pause between retry attempts, in seconds.</small>
-          </label>
-          <label class="field">
-            <span>Slow speed limit</span>
-            <div class="stepper-row">
-              <button type="button" class="stbtn" data-target="set-aria2-slowlimit" tabindex="-1">&#8722;</button>
-              <input id="set-aria2-slowlimit" type="number" min="0" max="10240" step="64">
-              <button type="button" class="stbtn" data-target="set-aria2-slowlimit" tabindex="-1">&#43;</button>
-            </div>
-            <small class="field-note">K/s. Crawl-speed connections get dropped/reconnected. 0 = off.</small>
-          </label>
-          <h4 class="subsection">BitTorrent</h4>
-          <label class="field">
-            <span>Max BT peers</span>
-            <div class="stepper-row">
-              <button type="button" class="stbtn" data-target="set-aria2-btpeers" tabindex="-1">&#8722;</button>
-              <input id="set-aria2-btpeers" type="number" min="0" max="500" step="16">
-              <button type="button" class="stbtn" data-target="set-aria2-btpeers" tabindex="-1">&#43;</button>
-            </div>
-            <small class="field-note">Peers connected per torrent. More is faster on popular seeds. 0 = unlimited.</small>
-          </label>
-          <h4 class="subsection">Identity</h4>
-          <label class="field wide">
-            <span>Browser user agent</span>
-            <input id="set-aria2-ua" type="text" spellcheck="false" placeholder="Mozilla/5.0 (Windows NT 10.0; ...)">
-            <small class="field-note">Masks aria2's fingerprint on direct downloads (some CDNs ban it). Empty = aria2 default.</small>
-          </label>
-        </div>
-        <div class="settings-card">
-          <div class="card-head">
-            <svg viewBox="0 0 24 24" class="card-ico"><path d="M3 9h18M3 15h7a3 3 0 0 0 6 0h5M4 5v14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-            <h3>Network</h3>
-          </div>
-          <label class="field">
-            <span>Speed limit</span>
-            <input id="set-speed-limit" type="text" spellcheck="false" placeholder="e.g. 5M">
-            <small class="field-note">Overall cap for every download. Empty = no limit. K/M/G units.</small>
-          </label>
-          <label class="field">
-            <span>Proxy</span>
-            <input id="set-proxy" type="text" spellcheck="false" placeholder="http://127.0.0.1:8080">
-            <small class="field-note">http or socks5 URL. Empty = direct connection.</small>
-          </label>
-        </div>
-        <div class="settings-card">
-          <div class="card-head">
-            <svg viewBox="0 0 24 24" class="card-ico"><path d="M10 15V8l6-3v10m-6 4a3 3 0 1 1-6 0 3 3 0 0 1 6 0m6 0a3 3 0 1 1-6 0 3 3 0 0 1 6 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
-            <h3>yt-dlp engine</h3>
-          </div>
-          <label class="field">
-            <span>Max video quality</span>
-            <select id="set-ytdlp-quality">
-              <option value="0">Best available</option>
-              <option value="2160">Up to 2160p (4K)</option>
-              <option value="1440">Up to 1440p (2K)</option>
-              <option value="1080">Up to 1080p (Full HD)</option>
-              <option value="720">Up to 720p (HD)</option>
-              <option value="480">Up to 480p</option>
-              <option value="360">Up to 360p</option>
-            </select>
-            <small class="field-note">Caps "best" jobs; never exceeds this height.</small>
-          </label>
-          <label class="field">
-            <span>Merge into container</span>
-            <select id="set-ytdlp-merge">
-              <option value="mkv">MKV (keeps any codecs)</option>
-              <option value="mp4">MP4</option>
-              <option value="webm">WebM</option>
-            </select>
-            <small class="field-note">Used when video + audio come as separate streams.</small>
-          </label>
-          <label class="field">
-            <span>Audio format</span>
-            <select id="set-ytdlp-audio">
-              <option value="mp3">MP3</option>
-              <option value="m4a">M4A (AAC)</option>
-              <option value="opus">Opus</option>
-              <option value="flac">FLAC (lossless)</option>
-              <option value="wav">WAV</option>
-              <option value="vorbis">Vorbis</option>
-              <option value="best">Original codec (no convert)</option>
-            </select>
-            <small class="field-note">Conversion target for audio jobs.</small>
-          </label>
-          <label class="field">
-            <span>Fragment downloads</span>
-            <div class="stepper-row">
-              <button type="button" class="stbtn" data-target="set-ytdlp-frags" tabindex="-1">&#8722;</button>
-              <input id="set-ytdlp-frags" type="number" min="1" max="16" step="1">
-              <button type="button" class="stbtn" data-target="set-ytdlp-frags" tabindex="-1">&#43;</button>
-            </div>
-            <small class="field-note">Parallel chunks yt-dlp's own downloader fetches — speeds up the aria2 fallback.</small>
-          </label>
-          <small class="field-note">Applies to new downloads. Embedding needs FFmpeg.</small>
-        </div>
-        <div class="settings-card">
-          <div class="card-head">
-            <svg viewBox="0 0 24 24" class="card-ico"><path d="M21 3H3a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1ZM7 21h10M9 7v6m0 0 2 2m-2-2-2 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <h3>Media extras</h3>
-          </div>
-          <label class="check"><input type="checkbox" id="set-write-subs"> <span>Download subtitles</span></label>
-          <label class="check"><input type="checkbox" id="set-write-auto-subs"> <span>Include auto-generated captions</span></label>
-          <label class="check"><input type="checkbox" id="set-ytdlp-embed-subs"> <span>Embed subtitles into the file</span></label>
-          <label class="check"><input type="checkbox" id="set-embed-metadata"> <span>Embed metadata &amp; chapters</span></label>
-          <label class="check"><input type="checkbox" id="set-embed-thumbnail"> <span>Embed thumbnail as cover art</span></label>
-          <small class="field-note">Defaults for video/audio (yt-dlp) downloads. Embedding needs FFmpeg.</small>
-        </div>
-        <div class="settings-card save-card span-2">
-          <button type="submit" class="primary" id="settings-save">Save</button>
-          <span id="settings-saved" class="saved-hint" hidden>Saved &#10003;</span>
-          <span class="field-note">Takes effect immediately for running jobs where possible.</span>
-        </div>
-      </form>
     </section>
   </main>
 </div>
+</div>
+<div id="toast-container" class="toast-container" aria-live="polite"></div>
 <script src="/static/app.js"></script>
 </body>
 </html>

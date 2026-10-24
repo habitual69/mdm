@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mDm Speed Widget</title>
+<style>
+  :root {
+    --bg: #141820;
+    --panel: #1b212c;
+    --accent: #10b981;
+    --accent-2: #34d399;
+    --ok: #10b981;
+    --muted: #8b9bb0;
+    --text: #f1f5f9;
+    --line: rgba(255, 255, 255, 0.14);
+    --line-soft: rgba(255, 255, 255, 0.07);
+  }
+  :root[data-theme="light"] {
+    --bg: #ffffff;
+    --panel: #f8fafc;
+    --text: #0f172a;
+    --muted: #64748b;
+    --line: rgba(0, 0, 0, 0.14);
+    --line-soft: rgba(0, 0, 0, 0.07);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+  html, body {
+    width: 100vw;
+    height: 100vh;
+    background: transparent !important;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Helvetica, Arial, sans-serif;
+  }
+  .hidden { display: none !important; }
+
+  /* ---------------- Common Component Styles ---------------- */
+  .tb-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex-shrink: 0;
+    transition: background .2s ease, box-shadow .2s ease;
+  }
+  .tb-dot.active {
+    background: var(--ok);
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.7);
+  }
+
+  .w-close {
+    background: none;
+    border: 0;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+    padding: 2px 4px;
+    border-radius: 4px;
+    -webkit-app-region: no-drag;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.45;
+    transition: opacity .15s ease, color .15s ease, background .15s ease;
+  }
+  .w-close:hover {
+    opacity: 1;
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  /* ---------------- 1. Pill Mode (244 x 34) ---------------- */
+  .widget-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 99px;
+    padding: 0 10px;
+    color: var(--muted);
+    cursor: grab;
+    font-size: 11px;
+    width: 100%;
+    height: 100%;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    -webkit-app-region: drag;
+    justify-content: space-between;
+    transition: border-color .15s ease;
+  }
+  .widget-pill:active { cursor: grabbing; }
+  .widget-pill:hover { border-color: rgba(255, 255, 255, 0.3); }
+
+  .tb-speed-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .tb-speed-item svg {
+    width: 11px;
+    height: 11px;
+    flex-shrink: 0;
+  }
+  .tb-speed-item.down { color: var(--accent); }
+  .tb-speed-item.up { color: var(--ok); }
+  .tb-speed-item b {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .tb-prog-box {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-left: 1px solid var(--line);
+    padding-left: 8px;
+  }
+  .tb-prog-track {
+    width: 42px;
+    height: 4px;
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.12);
+    overflow: hidden;
+  }
+  .tb-prog-track i {
+    display: block;
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    border-radius: 99px;
+    transition: width .2s ease;
+  }
+  .tb-prog-box span {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    min-width: 22px;
+  }
+
+  /* ---------------- 2. Card Mode (220 x 92) ---------------- */
+  .widget-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 8px 11px;
+    color: var(--muted);
+    cursor: grab;
+    width: 100%;
+    height: 100%;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    -webkit-app-region: drag;
+    transition: border-color .15s ease;
+  }
+  .widget-card:active { cursor: grabbing; }
+  .widget-card:hover { border-color: rgba(255, 255, 255, 0.3); }
+
+  .wc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+  .wc-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .wc-mascot {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+  }
+  .wc-title {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: .2px;
+  }
+  .wc-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .wc-badge.active {
+    background: rgba(16, 185, 129, 0.16);
+    color: var(--ok);
+  }
+
+  .wc-stats {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 2px 0;
+  }
+  .wc-stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+  .wc-stat svg {
+    width: 11px;
+    height: 11px;
+    flex-shrink: 0;
+  }
+  .wc-stat.down { color: var(--accent); }
+  .wc-stat.up { color: var(--ok); }
+  .wc-stat b {
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .wc-prog-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .wc-track {
+    flex: 1;
+    height: 4px;
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.12);
+    overflow: hidden;
+  }
+  .wc-track i {
+    display: block;
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    border-radius: 99px;
+    transition: width .2s ease;
+  }
+  .wc-pct {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    min-width: 24px;
+    text-align: right;
+  }
+
+  /* ---------------- 3. Minimalistic Mode (146 x 32) ---------------- */
+  .widget-mini {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 7px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 99px;
+    padding: 0 9px;
+    color: var(--muted);
+    cursor: grab;
+    width: 100%;
+    height: 100%;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    -webkit-app-region: drag;
+    transition: border-color .15s ease;
+  }
+  .widget-mini:active { cursor: grabbing; }
+  .widget-mini:hover { border-color: rgba(255, 255, 255, 0.3); }
+
+  .wm-speed {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--accent);
+  }
+  .wm-speed svg {
+    width: 11px;
+    height: 11px;
+    flex-shrink: 0;
+  }
+  .wm-speed b {
+    font-weight: 600;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+  .wm-pct {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+</style>
+</head>
+<body>
+
+<!-- SVG defs for mascot -->
+<svg style="position: absolute; width: 0; height: 0;" aria-hidden="true">
+  <defs>
+    <g id="mascot">
+      <rect width="120" height="120" rx="28" fill="#e8934a"/>
+      <path d="M60 26v44m-18-16 18 18 18-18M32 94h56" stroke="#161a21" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </g>
+  </defs>
+</svg>
+
+<!-- 1. Pill Widget View -->
+<div class="widget-pill" id="view-pill" data-tauri-drag-region title="mDm Speed Widget — Drag to move, double-click to open mDm">
+  <span class="tb-dot" id="w-dot"></span>
+  <div class="tb-speed-item down" data-tauri-drag-region>
+    <svg viewBox="0 0 16 16"><path d="M8 2.5v8m-3.5-3.5 3.5 3.5 3.5-3.5M2.5 13.5h11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <b id="w-down">0 B/s</b>
+  </div>
+  <div class="tb-speed-item up" data-tauri-drag-region>
+    <svg viewBox="0 0 16 16"><path d="M8 13.5v-8m-3.5 3.5 3.5-3.5 3.5 3.5M2.5 2.5h11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <b id="w-up">0 B/s</b>
+  </div>
+  <div class="tb-prog-box" data-tauri-drag-region>
+    <div class="tb-prog-track"><i id="w-fill"></i></div>
+    <span id="w-pct">0%</span>
+  </div>
+  <button type="button" class="w-close" id="w-close-pill" title="Hide widget">✕</button>
+</div>
+
+<!-- 2. Card Widget View -->
+<div class="widget-card hidden" id="view-card" data-tauri-drag-region title="mDm Speed Widget — Drag to move, double-click to open mDm">
+  <div class="wc-header" data-tauri-drag-region>
+    <div class="wc-brand" data-tauri-drag-region>
+      <svg class="wc-mascot" viewBox="0 0 120 120"><use href="#mascot"/></svg>
+      <span class="wc-title" data-tauri-drag-region>mDm</span>
+    </div>
+    <span class="wc-badge" id="wc-badge">Idle</span>
+    <button type="button" class="w-close" id="w-close-card" title="Hide widget">✕</button>
+  </div>
+  <div class="wc-stats" data-tauri-drag-region>
+    <div class="wc-stat down" data-tauri-drag-region>
+      <svg viewBox="0 0 16 16"><path d="M8 2.5v8m-3.5-3.5 3.5 3.5 3.5-3.5M2.5 13.5h11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <b id="wc-down">0 B/s</b>
+    </div>
+    <div class="wc-stat up" data-tauri-drag-region>
+      <svg viewBox="0 0 16 16"><path d="M8 13.5v-8m-3.5 3.5 3.5-3.5 3.5 3.5M2.5 2.5h11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <b id="wc-up">0 B/s</b>
+    </div>
+  </div>
+  <div class="wc-prog-row" data-tauri-drag-region>
+    <div class="wc-track"><i id="wc-fill"></i></div>
+    <span class="wc-pct" id="wc-pct">0%</span>
+  </div>
+</div>
+
+<!-- 3. Minimalistic Widget View -->
+<div class="widget-mini hidden" id="view-mini" data-tauri-drag-region title="mDm Speed Widget — Drag to move, double-click to open mDm">
+  <span class="tb-dot" id="wm-dot"></span>
+  <div class="wm-speed" data-tauri-drag-region>
+    <svg viewBox="0 0 16 16"><path d="M8 2.5v8m-3.5-3.5 3.5 3.5 3.5-3.5M2.5 13.5h11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <b id="wm-down">0 B/s</b>
+  </div>
+  <span class="wm-pct" id="wm-pct">0%</span>
+  <button type="button" class="w-close" id="w-close-mini" title="Hide widget">✕</button>
+</div>
+
+<script>
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+
+  function fmtBytes(n) {
+    if (n === null || n === undefined) return "—";
+    const units = ["B", "KB", "MB", "GB"];
+    let v = n, u = 0;
+    while (Math.abs(v) >= 1024 && u < units.length - 1) { v /= 1024; u += 1; }
+    return `${v.toFixed(v >= 100 || u === 0 ? 0 : 1)} ${units[u]}`;
+  }
+
+  function fmtSpeed(bps) {
+    return bps ? `${fmtBytes(bps)}/s` : "0 B/s";
+  }
+
+  function openMain() {
+    fetch("/api/window/maximize", { method: "POST" }).catch(() => {});
+  }
+
+  function closeWidget(e) {
+    e.stopPropagation();
+    fetch("/api/window/toggle-floating", { method: "POST" }).catch(() => {});
+  }
+
+  ["view-pill", "view-card", "view-mini"].forEach(id => {
+    $(id)?.addEventListener("dblclick", openMain);
+  });
+  $("w-close-pill")?.addEventListener("click", closeWidget);
+  $("w-close-card")?.addEventListener("click", closeWidget);
+  $("w-close-mini")?.addEventListener("click", closeWidget);
+
+  let currentShape = null;
+
+  function setWidgetShape(shape) {
+    const s = shape === "card" || shape === "minimalistic" ? shape : "pill";
+    if (s === currentShape) return;
+    currentShape = s;
+
+    $("view-pill").classList.toggle("hidden", s !== "pill");
+    $("view-card").classList.toggle("hidden", s !== "card");
+    $("view-mini").classList.toggle("hidden", s !== "minimalistic");
+
+    let dims = { width: 244, height: 34 };
+    if (s === "card") dims = { width: 220, height: 92 };
+    if (s === "minimalistic") dims = { width: 146, height: 32 };
+
+    fetch("/api/window/resize-floating", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(dims)
+    }).catch(() => {});
+  }
+
+  async function checkConfig() {
+    try {
+      const res = await fetch("/api/config");
+      if (!res.ok) return;
+      const cfg = await res.json();
+      if (cfg.theme) {
+        document.documentElement.dataset.theme = cfg.theme;
+      }
+      if (cfg.accent_color) {
+        document.documentElement.style.setProperty("--accent", cfg.accent_color);
+        document.documentElement.style.setProperty("--accent-2", cfg.accent_color);
+      }
+      if (cfg.widget_shape) {
+        setWidgetShape(cfg.widget_shape);
+      }
+    } catch (_) {}
+  }
+
+  async function pollStats() {
+    try {
+      const res = await fetch("/api/jobs");
+      if (!res.ok) return;
+      const jobs = await res.json();
+      const running = jobs.filter(j => j.state === "running");
+      const dSpeed = running.reduce((a, j) => a + (j.speed_bps || 0), 0);
+      const uSpeed = running.reduce((a, j) => a + (j.upload_speed_bps || 0), 0);
+      const pct = running.length ? (running.reduce((a, j) => a + (j.progress || 0), 0) / running.length) : 0;
+      const pctRound = Math.round(pct);
+      const sDown = fmtSpeed(dSpeed);
+      const sUp = fmtSpeed(uSpeed);
+      const pctWidth = `${Math.min(100, Math.max(0, pct))}%`;
+      const isActive = running.length > 0;
+
+      // Pill view elements
+      $("w-down").textContent = sDown;
+      $("w-up").textContent = sUp;
+      $("w-fill").style.width = pctWidth;
+      $("w-pct").textContent = `${pctRound}%`;
+      $("w-dot").classList.toggle("active", isActive);
+
+      // Card view elements
+      $("wc-down").textContent = sDown;
+      $("wc-up").textContent = sUp;
+      $("wc-fill").style.width = pctWidth;
+      $("wc-pct").textContent = `${pctRound}%`;
+      const wcBadge = $("wc-badge");
+      wcBadge.textContent = isActive ? `${running.length} active` : "Idle";
+      wcBadge.classList.toggle("active", isActive);
+
+      // Minimalistic view elements
+      $("wm-down").textContent = sDown;
+      $("wm-pct").textContent = `${pctRound}%`;
+      $("wm-dot").classList.toggle("active", isActive);
+    } catch (_) {}
+  }
+
+  setInterval(pollStats, 1000);
+  setInterval(checkConfig, 2500);
+  checkConfig();
+  pollStats();
+</script>
+</body>
+</html>

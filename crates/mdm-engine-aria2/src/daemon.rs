@@ -77,13 +77,15 @@ impl Aria2Daemon {
         if !cfg.aria2_user_agent.trim().is_empty() {
             args.push(format!("--user-agent={}", cfg.aria2_user_agent.trim()));
         }
+        if !cfg.aria2_custom_tracker_url.trim().is_empty() {
+            args.push(format!("--bt-tracker={}", cfg.aria2_custom_tracker_url.trim()));
+        }
 
         let mut cmd = tokio::process::Command::new(&bin);
         cmd.args(&args).stdout(Stdio::null()).stderr(Stdio::null());
 
         #[cfg(windows)]
         {
-            use std::os::windows::process::CommandExt;
             cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
         }
 

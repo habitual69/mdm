@@ -1,12 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "mdm",
+  "productName": "mDm Media Download Manager",
   "version": "0.1.0-alpha.1",
   "identifier": "dev.mdm.app",
   "build": {
     "frontendDist": "../../crates/mdm-server/ui"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [],
     "security": {
       "csp": null

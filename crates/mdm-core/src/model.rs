@@ -40,17 +40,117 @@ impl JobKind {
 
     /// Best-effort auto-detection from a URL / path.
     pub fn detect(input: &str) -> JobKind {
-        let lower = input.to_ascii_lowercase();
-        if input.starts_with("magnet:") {
+        let input_clean = input.trim();
+        if input_clean.starts_with("magnet:") {
             return JobKind::Magnet;
         }
-        // Strip query string before checking extension.
+        let lower = input_clean.to_ascii_lowercase();
+        // Strip query string and fragment before checking extension.
         let path_part = lower.split('?').next().unwrap_or(&lower);
+        let path_part = path_part.split('#').next().unwrap_or(path_part);
         if path_part.ends_with(".torrent") {
             return JobKind::Torrent;
         }
-        JobKind::Video
+
+        let ext = path_part.rsplit('.').next().unwrap_or("");
+        match ext {
+            // Executables, packages, installers, archives, disk images, documents -> Direct (aria2)
+            "exe" | "msi" | "apk" | "appimage" | "deb" | "rpm" | "dmg" | "pkg" | "bin"
+            | "zip" | "rar" | "7z" | "tar" | "gz" | "bz2" | "xz" | "zst" | "tgz" | "tbz2" | "txz"
+            | "iso" | "img" | "cab" | "vhd" | "vdi" | "vmdk" | "jar" | "war" | "wim" | "7zip"
+            | "pdf" | "doc" | "docx" | "rtf" | "txt" | "md" | "markdown" | "epub" | "mobi" | "csv" | "tsv"
+            | "xls" | "xlsx" | "xlsm" | "ppt" | "pptx" | "pps" | "ppsx" | "odt" | "ods" | "odp"
+            | "html" | "htm" | "xml" | "json" | "yaml" | "yml" | "tex" | "sql" | "log"
+            | "dat" | "bak" | "dump" | "db" | "sqlite" | "cfg" | "conf" => JobKind::Direct,
+            // Audio files
+            "mp3" | "flac" | "wav" | "ogg" | "opus" | "m4a" | "aac" | "wma" | "alac" | "mid" | "midi"
+            | "aiff" | "aif" | "mka" | "ape" | "ac3" | "dts" | "amr" => JobKind::Audio,
+            // Video files
+            "mp4" | "mkv" | "webm" | "avi" | "mov" | "m4v" | "ts" | "wmv" | "flv" | "mpg" | "mpeg"
+            | "3gp" | "3g2" | "ogv" | "vob" | "m2ts" | "mts" | "f4v" | "asf" | "rm" | "rmvb" | "divx" => JobKind::Video,
+            _ => {
+                // If extension not found at the end of path, check if any direct extension appears in query params
+                if lower.contains(".exe") || lower.contains(".deb") || lower.contains(".rpm") || lower.contains(".apk")
+                    || lower.contains(".zip") || lower.contains(".iso") || lower.contains(".msi") || lower.contains(".appimage")
+                    || lower.contains(".7z") || lower.contains(".tar.gz") || lower.contains(".pdf") || lower.contains(".rar") {
+                    JobKind::Direct
+                } else {
+                    JobKind::Video
+                }
+            }
+        }
     }
+}
+
+/// Helper to extract clean file extension from a URL or title string.
+pub fn extract_extension(text: &str) -> Option<String> {
+    let lower = text.to_ascii_lowercase();
+    let path = lower.split('?').next().unwrap_or(&lower);
+    let path = path.split('#').next().unwrap_or(path);
+    if let Some(idx) = path.rfind('.') {
+        let ext = &path[idx + 1..];
+        if !ext.is_empty() && ext.len() <= 10 && ext.chars().all(|c| c.is_alphanumeric()) {
+            return Some(ext.to_string());
+        }
+    }
+    // Check if filename parameter exists in query string
+    for part in lower.split(['?', '&', ';']) {
+        if let Some((_, val)) = part.split_once('=') {
+            if let Some(idx) = val.rfind('.') {
+                let ext = &val[idx + 1..];
+                if !ext.is_empty() && ext.len() <= 10 && ext.chars().all(|c| c.is_alphanumeric()) {
+                    return Some(ext.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Returns one of the organized folder categories matching IDM semantics:
+/// "Compress", "Document", "Videos", "Audios", "Torrents", or "Miscellaneous".
+pub fn category_for_with_title(url: &str, title: Option<&str>, kind: JobKind) -> &'static str {
+    if kind == JobKind::Torrent || kind == JobKind::Magnet || url.starts_with("magnet:") {
+        return "Torrents";
+    }
+
+    let ext = title.and_then(extract_extension).or_else(|| extract_extension(url));
+
+    if let Some(ref ext) = ext {
+        match ext.as_str() {
+            "torrent" => "Torrents",
+            // Compress: Compressed archives, disk images, packages, installers
+            "zip" | "rar" | "7z" | "tar" | "gz" | "bz2" | "xz" | "zst" | "tgz" | "tbz2" | "txz"
+            | "iso" | "img" | "dmg" | "cab" | "vhd" | "vdi" | "vmdk" | "apk" | "deb" | "rpm"
+            | "exe" | "msi" | "appimage" | "bin" | "jar" | "war" | "ear" | "arj" | "lzh" | "ace"
+            | "uue" | "bz" | "lz" | "lzma" | "cpio" | "ar" | "wim" | "7zip" | "pkg" | "run" => "Compress",
+            // Document: doc, docx, pdf, txt, md, markdown, excel, presentation, subtitles, code/markup
+            "pdf" | "doc" | "docx" | "rtf" | "txt" | "md" | "markdown" | "csv" | "tsv" | "xls"
+            | "xlsx" | "xlsm" | "xlsb" | "ppt" | "pptx" | "pps" | "ppsx" | "odt" | "ods" | "odp"
+            | "epub" | "mobi" | "azw" | "azw3" | "html" | "htm" | "xhtml" | "xml" | "json"
+            | "yaml" | "yml" | "tex" | "log" | "sql" | "srt" | "vtt" | "ass" => "Document",
+            // Audios: audio formats
+            "mp3" | "flac" | "wav" | "ogg" | "oga" | "opus" | "m4a" | "aac" | "wma" | "alac"
+            | "mid" | "midi" | "aiff" | "aif" | "mka" | "ape" | "ac3" | "dts" | "amr" => "Audios",
+            // Videos: video formats
+            "mp4" | "mkv" | "webm" | "avi" | "mov" | "m4v" | "ts" | "wmv" | "flv" | "mpg"
+            | "mpeg" | "m2v" | "3gp" | "3g2" | "ogv" | "vob" | "m2ts" | "mts" | "f4v" | "asf"
+            | "rm" | "rmvb" | "divx" => "Videos",
+            // Any other extension -> Miscellaneous
+            _ => "Miscellaneous",
+        }
+    } else {
+        match kind {
+            JobKind::Audio => "Audios",
+            JobKind::Video => "Videos",
+            JobKind::Torrent | JobKind::Magnet => "Torrents",
+            JobKind::Direct => "Miscellaneous",
+        }
+    }
+}
+
+pub fn category_for(url: &str, kind: JobKind) -> &'static str {
+    category_for_with_title(url, None, kind)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -150,6 +250,8 @@ pub struct Job {
     #[serde(default)]
     pub speed_bps: Option<i64>,
     #[serde(default)]
+    pub upload_speed_bps: Option<i64>,
+    #[serde(default)]
     pub eta_sec: Option<i64>,
     /// aria2 gid, populated while a job is alive in the aria2c daemon.
     #[serde(default)]
@@ -182,6 +284,7 @@ impl Job {
             downloaded_bytes: None,
             total_bytes: None,
             speed_bps: None,
+            upload_speed_bps: None,
             eta_sec: None,
             external_id: None,
             error: None,
@@ -208,6 +311,7 @@ pub struct JobPatch {
     pub downloaded_bytes: Option<i64>,
     pub total_bytes: Option<i64>,
     pub speed_bps: Option<i64>,
+    pub upload_speed_bps: Option<i64>,
     pub eta_sec: Option<i64>,
     pub external_id: Option<String>,
     pub error: Option<String>,
@@ -233,5 +337,39 @@ impl JobPatch {
         let mut p = Self::with_state(state);
         p.id = id.into();
         p
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_category_for() {
+        assert_eq!(category_for("magnet:?xt=urn:btih:123", JobKind::Magnet), "Torrents");
+        assert_eq!(category_for("https://example.com/arch.zip", JobKind::Direct), "Compress");
+        assert_eq!(category_for("https://example.com/movie.mp4", JobKind::Direct), "Videos");
+        assert_eq!(category_for("https://example.com/song.mp3", JobKind::Direct), "Audios");
+        assert_eq!(category_for("https://example.com/doc.pdf", JobKind::Direct), "Document");
+        assert_eq!(category_for("https://example.com/notes.md", JobKind::Direct), "Document");
+        assert_eq!(category_for("https://example.com/sheet.xlsx", JobKind::Direct), "Document");
+        assert_eq!(category_for("https://example.com/index.html", JobKind::Direct), "Document");
+        assert_eq!(category_for("https://youtube.com/watch?v=123", JobKind::Video), "Videos");
+        assert_eq!(category_for("https://example.com/unknown.xyz", JobKind::Direct), "Miscellaneous");
+        assert_eq!(category_for("https://example.com/rawfile", JobKind::Direct), "Miscellaneous");
+        assert_eq!(category_for_with_title("https://example.com/get?id=42", Some("readme.md"), JobKind::Direct), "Document");
+    }
+
+    #[test]
+    fn test_job_kind_detect() {
+        assert_eq!(JobKind::detect("magnet:?xt=urn:btih:123"), JobKind::Magnet);
+        assert_eq!(JobKind::detect("https://example.com/file.torrent"), JobKind::Torrent);
+        assert_eq!(JobKind::detect("https://example.com/setup.exe"), JobKind::Direct);
+        assert_eq!(JobKind::detect("https://example.com/package.deb"), JobKind::Direct);
+        assert_eq!(JobKind::detect("https://example.com/archive.zip"), JobKind::Direct);
+        assert_eq!(JobKind::detect("https://example.com/doc.pdf"), JobKind::Direct);
+        assert_eq!(JobKind::detect("https://example.com/song.mp3"), JobKind::Audio);
+        assert_eq!(JobKind::detect("https://youtube.com/watch?v=123"), JobKind::Video);
+        assert_eq!(JobKind::detect("https://x.com/user/status/123"), JobKind::Video);
     }
 }

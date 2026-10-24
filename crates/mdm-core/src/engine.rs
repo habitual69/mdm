@@ -144,6 +144,53 @@ pub fn find_bin(name: &str, extra: Option<&[PathBuf]>) -> Option<PathBuf> {
     candidates(name, Some(&dirs)).into_iter().next()
 }
 
+/// Locate a JavaScript runtime (node, bun, deno) needed by yt-dlp to solve
+/// YouTube signature and player challenges.
+pub fn find_js_runtime() -> Option<PathBuf> {
+    // 1. Check helper bin directory (~/.local/share/mdm/bin/node)
+    let mdm_node = crate::config::data_dir().join("bin/node");
+    if mdm_node.is_file() {
+        return Some(mdm_node);
+    }
+    // 2. Check standard PATH for node, bun, or deno
+    if let Some(p) = find_bin("node", None) {
+        return Some(p);
+    }
+    if let Some(p) = find_bin("bun", None) {
+        return Some(p);
+    }
+    if let Some(p) = find_bin("deno", None) {
+        return Some(p);
+    }
+    // 3. Scan user environments (NVM, fnm, asdf, bun, deno)
+    if let Some(home) = dirs::home_dir() {
+        let nvm_pattern = home.join(".nvm/versions/node");
+        if let Ok(entries) = std::fs::read_dir(&nvm_pattern) {
+            for entry in entries.flatten() {
+                let candidate = entry.path().join("bin").join("node");
+                if candidate.is_file() {
+                    return Some(candidate);
+                }
+            }
+        }
+        let common = [
+            home.join(".fnm/current/bin/node"),
+            home.join(".asdf/shims/node"),
+            home.join(".bun/bin/bun"),
+            home.join(".deno/bin/deno"),
+            home.join(".local/bin/node"),
+            PathBuf::from("/usr/local/bin/node"),
+            PathBuf::from("/usr/bin/node"),
+        ];
+        for c in common {
+            if c.is_file() {
+                return Some(c);
+            }
+        }
+    }
+    None
+}
+
 pub fn bin_path(name: &str, cfg: &Config) -> Result<PathBuf> {
     let extra: Option<Vec<PathBuf>> = cfg.bin_dir.as_ref().map(|d| vec![d.clone()]);
     find_bin(name, extra.as_deref()).ok_or_else(|| Error::BinMissing {

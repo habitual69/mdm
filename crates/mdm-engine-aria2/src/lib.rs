@@ -3,7 +3,8 @@
 mod daemon;
 mod rpc;
 
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -22,11 +23,15 @@ pub use torrent::{TorrentInfo, torrent_info};
 
 pub struct Aria2Engine {
     pub daemon: DaemonHandle,
+    active_gids: Arc<Mutex<HashMap<String, String>>>,
 }
 
 impl Aria2Engine {
     pub fn new(cfg: Config, data_dir: std::path::PathBuf) -> Aria2Engine {
-        Aria2Engine { daemon: DaemonHandle::new(cfg, data_dir) }
+        Aria2Engine {
+            daemon: DaemonHandle::new(cfg, data_dir),
+            active_gids: Arc::new(Mutex::new(HashMap::new())),
+        }
     }
 
     async fn add_job(&self, job: &Job, cfg: &Config) -> std::result::Result<String, JobError> {
@@ -67,6 +72,12 @@ fn select_file_opts(job: &mdm_core::Job, cfg: &Config) -> serde_json::Value {
         _ => json!({}),
     };
     if let Some(obj) = opts.as_object_mut() {
+        if let Some(title) = &job.title {
+            let t = title.trim();
+            if !t.is_empty() {
+                obj.insert("out".into(), json!(t));
+            }
+        }
         obj.insert(
             "max-connection-per-server".into(),
             json!(cfg.aria2_connections.clamp(1, 16).to_string()),
@@ -200,6 +211,25 @@ impl Engine for Aria2Engine {
 
         let gid = self.reattach_or_add(&job, &ctx.cfg).await?;
 
+        self.active_gids
+            .lock()
+            .unwrap()
+            .insert(job.id.clone(), gid.clone());
+
+        struct ActiveGidGuard {
+            job_id: String,
+            active_gids: Arc<Mutex<HashMap<String, String>>>,
+        }
+        impl Drop for ActiveGidGuard {
+            fn drop(&mut self) {
+                let _ = self.active_gids.lock().unwrap().remove(&self.job_id);
+            }
+        }
+        let _gid_guard = ActiveGidGuard {
+            job_id: job.id.clone(),
+            active_gids: Arc::clone(&self.active_gids),
+        };
+
         // Persist our tracking gid early so a crash keeps the linkage.
         ctx.send_patch(
             &job.id,
@@ -228,6 +258,32 @@ impl Engine for Aria2Engine {
                         Ok(v) => v,
                         Err(e) => {
                             warn!("tellStatus {}: {e}", job.short_id());
+                            let err_msg = e.to_string();
+                            if err_msg.contains("not found") || err_msg.contains("not recognized") {
+                                if let Some(title) = &job.title {
+                                    let target_file = job.output_dir.join(title);
+                                    let aria2_file = job.output_dir.join(format!("{}.aria2", title));
+                                    if target_file.is_file() && !aria2_file.is_file() {
+                                        let size = target_file.metadata().map(|m| m.len() as i64).unwrap_or(0);
+                                        if size > 0 {
+                                            ctx.send_patch(
+                                                &job.id,
+                                                JobPatch {
+                                                    state: Some(JobState::Done),
+                                                    progress: Some(100.0),
+                                                    downloaded_bytes: Some(size),
+                                                    total_bytes: Some(size),
+                                                    speed_bps: Some(0),
+                                                    upload_speed_bps: Some(0),
+                                                    output_path: Some(target_file.clone()),
+                                                    ..Default::default()
+                                                },
+                                            );
+                                            return Ok(JobDone { output_path: Some(target_file), title: job.title.clone() });
+                                        }
+                                    }
+                                }
+                            }
                             continue;
                         }
                     };
@@ -238,6 +294,10 @@ impl Engine for Aria2Engine {
                         && child_gid != tracking_gid
                     {
                         tracking_gid = child_gid.to_string();
+                        self.active_gids
+                            .lock()
+                            .unwrap()
+                            .insert(job.id.clone(), tracking_gid.clone());
                         ctx.send_patch(
                             &job.id,
                             JobPatch {
@@ -263,6 +323,12 @@ impl Engine for Aria2Engine {
                         continue;
                     }
 
+                    let up_speed = status
+                        .get("uploadSpeed")
+                        .and_then(|x| x.as_str())
+                        .and_then(|s| s.parse::<i64>().ok())
+                        .unwrap_or(0);
+
                     match status_str.as_str() {
                         "active" | "waiting" => {
                             let pct = if total > 0 { (done as f32 / total as f32) * 100.0 } else { 0.0 };
@@ -272,6 +338,7 @@ impl Engine for Aria2Engine {
                                 downloaded_bytes: Some(done as i64),
                                 total_bytes: Some(total as i64),
                                 speed_bps: Some(speed as i64),
+                                upload_speed_bps: Some(up_speed),
                                 eta_sec: eta,
                                 ..Default::default()
                             });
@@ -302,28 +369,48 @@ impl Engine for Aria2Engine {
                             return Err(JobError::Retry(msg));
                         }
                         "complete" => {
-                            let seed_minutes = ctx.cfg.seed_minutes;
+                            let is_torrent = job.kind == mdm_core::JobKind::Torrent
+                                || job.kind == mdm_core::JobKind::Magnet
+                                || status.get("bittorrent").is_some();
+                            let seed_minutes = if is_torrent { ctx.cfg.seed_minutes } else { 0 };
                             let seeded: i64 = status
                                 .get("seedingTime")
                                 .and_then(|x| x.as_str())
                                 .and_then(|s| s.parse().ok())
                                 .unwrap_or(0);
                             let done_seeding =
-                                seed_minutes == 0 || seeded >= (seed_minutes as i64) * 60;
+                                !is_torrent || seed_minutes == 0 || seeded >= (seed_minutes as i64) * 60;
                             if done_seeding {
-                                let out_path = first_file_path(&status);
+                                let mut out_path = first_file_path(&status);
+                                if out_path.is_none() {
+                                    if let Some(title) = &job.title {
+                                        let candidate = job.output_dir.join(title);
+                                        if candidate.exists() {
+                                            out_path = Some(candidate);
+                                        }
+                                    }
+                                }
                                 let _ = rpc.remove_download_result(&tracking_gid).await;
-                                return Ok(JobDone { output_path: out_path, title: None });
+                                ctx.send_patch(&job.id, JobPatch {
+                                    state: Some(JobState::Done),
+                                    progress: Some(100.0),
+                                    downloaded_bytes: Some(total as i64),
+                                    total_bytes: Some(total as i64),
+                                    speed_bps: Some(0),
+                                    upload_speed_bps: Some(0),
+                                    output_path: out_path.clone(),
+                                    ..Default::default()
+                                });
+                                return Ok(JobDone { output_path: out_path, title: job.title.clone() });
                             }
-                            // Still seeding: report progress 100 with uploadSpeed.
+                            // Still seeding (BitTorrent only): report progress 100 with uploadSpeed.
                             ctx.send_patch(&job.id, JobPatch {
                                 state: Some(JobState::Running),
                                 progress: Some(100.0),
-                                speed_bps: Some(
-                                    status.get("uploadSpeed").and_then(|x| x.as_str())
-                                        .and_then(|s| s.parse::<i64>().ok())
-                                        .unwrap_or(0),
-                                ),
+                                downloaded_bytes: Some(total as i64),
+                                total_bytes: Some(total as i64),
+                                speed_bps: Some(0),
+                                upload_speed_bps: Some(up_speed),
                                 ..Default::default()
                             });
                         }
@@ -363,12 +450,37 @@ impl Engine for Aria2Engine {
     }
 
     async fn remove(&self, job: &Job) {
-        if let Some(gid) = job.external_id.clone()
-            && let Ok(daemon) = self.daemon.get().await
-        {
-            let rpc = rpc::Aria2Rpc::new(daemon.rpc_addr.clone(), daemon.secret.clone());
-            let _ = rpc.force_remove(&gid).await;
-            let _ = rpc.remove_download_result(&gid).await;
+        let active_gid = self.active_gids.lock().unwrap().get(&job.id).cloned();
+        let db_gid = job.external_id.clone();
+
+        let mut gids = Vec::new();
+        if let Some(g) = active_gid {
+            gids.push(g);
+        }
+        if let Some(g) = db_gid {
+            if !gids.contains(&g) {
+                gids.push(g);
+            }
+        }
+
+        if !gids.is_empty() {
+            if let Ok(daemon) = self.daemon.get().await {
+                let rpc = rpc::Aria2Rpc::new(daemon.rpc_addr.clone(), daemon.secret.clone());
+                for gid in &gids {
+                    if let Ok(status) = rpc.tell_status(gid).await {
+                        if let Some(children) = status.get("followedBy").and_then(|f| f.as_array()) {
+                            for child in children {
+                                if let Some(cgid) = child.as_str() {
+                                    let _ = rpc.force_remove(cgid).await;
+                                    let _ = rpc.remove_download_result(cgid).await;
+                                }
+                            }
+                        }
+                    }
+                    let _ = rpc.force_remove(gid).await;
+                    let _ = rpc.remove_download_result(gid).await;
+                }
+            }
         }
     }
 

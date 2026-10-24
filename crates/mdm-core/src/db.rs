@@ -14,7 +14,7 @@ pub struct Db {
 }
 
 const COLUMNS: &str = "id, parent_id, url, kind, engine, state, title, output_dir, output_path, \
-     format, progress, downloaded_bytes, total_bytes, speed_bps, eta_sec, external_id, \
+     format, progress, downloaded_bytes, total_bytes, speed_bps, upload_speed_bps, eta_sec, external_id, \
      error, retries, retry_at, created_at, updated_at, select_files";
 
 impl Db {
@@ -36,6 +36,16 @@ impl Db {
             .unwrap_or(1);
         if has_select == 0 {
             let _ = conn.execute("ALTER TABLE jobs ADD COLUMN select_files TEXT", []);
+        }
+        let has_upload: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM pragma_table_info('jobs') WHERE name='upload_speed_bps'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(1);
+        if has_upload == 0 {
+            let _ = conn.execute("ALTER TABLE jobs ADD COLUMN upload_speed_bps INTEGER", []);
         }
         Ok(Db { conn: Mutex::new(conn) })
     }
@@ -64,9 +74,9 @@ impl Db {
         self.with(|c| {
             c.execute(
                 "INSERT INTO jobs (id, parent_id, url, kind, engine, state, title, output_dir, \
-                 output_path, format, progress, downloaded_bytes, total_bytes, speed_bps, eta_sec, \
+                 output_path, format, progress, downloaded_bytes, total_bytes, speed_bps, upload_speed_bps, eta_sec, \
                  external_id, error, retries, retry_at, created_at, updated_at, select_files) \
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22)",
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23)",
                 params![
                     job.id,
                     job.parent_id,
@@ -82,6 +92,7 @@ impl Db {
                     job.downloaded_bytes,
                     job.total_bytes,
                     job.speed_bps,
+                    job.upload_speed_bps,
                     job.eta_sec,
                     job.external_id,
                     job.error,
@@ -119,6 +130,7 @@ impl Db {
             downloaded_bytes: r.get("downloaded_bytes")?,
             total_bytes: r.get("total_bytes")?,
             speed_bps: r.get("speed_bps")?,
+            upload_speed_bps: r.get("upload_speed_bps").ok().flatten(),
             eta_sec: r.get("eta_sec")?,
             external_id: r.get("external_id")?,
             error: r.get("error")?,
@@ -242,6 +254,9 @@ impl Db {
             if let Some(v) = patch.speed_bps {
                 push("speed_bps", Sql::Integer(v), &mut sets);
             }
+            if let Some(v) = patch.upload_speed_bps {
+                push("upload_speed_bps", Sql::Integer(v), &mut sets);
+            }
             if let Some(v) = patch.eta_sec {
                 push("eta_sec", Sql::Integer(v), &mut sets);
             }
@@ -345,6 +360,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     downloaded_bytes INTEGER,
     total_bytes INTEGER,
     speed_bps INTEGER,
+    upload_speed_bps INTEGER,
     eta_sec INTEGER,
     external_id TEXT,
     error TEXT,

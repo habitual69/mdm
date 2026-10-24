@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>mDm — Download File Info</title>
+  <link rel="stylesheet" href="dialog.css">
+</head>
+<body>
+  <div class="dlg-window">
+    <!-- Header -->
+    <div class="dlg-head">
+      <div class="dlg-title">
+        <svg class="dlg-mascot" viewBox="0 0 120 120">
+          <defs>
+            <radialGradient id="g-dlg-mascot" cx="0.5" cy="0.5" r="0.75">
+              <stop offset="0" stop-color="#f2a95c"/>
+              <stop offset="1" stop-color="#c96a2e"/>
+            </radialGradient>
+          </defs>
+          <circle cx="60" cy="62" r="44" fill="url(#g-dlg-mascot)"/>
+          <circle cx="46" cy="44" r="6.5" fill="#141820"/>
+          <circle cx="74" cy="44" r="6.5" fill="#141820"/>
+          <circle cx="48" cy="42" r="2" fill="#fff"/>
+          <circle cx="76" cy="42" r="2" fill="#fff"/>
+          <path d="M47 57 Q60 66 73 57" stroke="#141820" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+          <rect x="54.5" y="70" width="11" height="16" rx="5.5" fill="#141820"/>
+          <path d="M42 80 h36 L60 97 Z" fill="#141820"/>
+        </svg>
+        <span>mDm — Download File Info</span>
+      </div>
+      <button type="button" class="dlg-btn-close" id="btn-close" title="Close">✕</button>
+    </div>
+
+    <!-- Form Content -->
+    <div class="dlg-body">
+      <div class="dlg-row">
+        <label class="dlg-label">URL:</label>
+        <div class="dlg-field-wrap">
+          <input type="text" id="dlg-url" class="dlg-input" readonly spellcheck="false">
+        </div>
+      </div>
+
+      <div class="dlg-row">
+        <label class="dlg-label">Category:</label>
+        <div class="dlg-field-wrap dlg-inline">
+          <select id="dlg-category" class="dlg-select">
+            <option value="general">General</option>
+            <option value="programs">Programs (.exe, .msi, .apk)</option>
+            <option value="compressed">Compressed (.zip, .rar, .7z)</option>
+            <option value="videos">Videos (.mp4, .mkv, .webm)</option>
+            <option value="audio">Audio (.mp3, .flac, .wav)</option>
+            <option value="documents">Documents (.pdf, .docx, .txt)</option>
+          </select>
+          <span class="dlg-size-badge" id="dlg-size">Size: Unknown</span>
+        </div>
+      </div>
+
+      <div class="dlg-row">
+        <label class="dlg-label">Save As:</label>
+        <div class="dlg-field-wrap">
+          <input type="text" id="dlg-filename" class="dlg-input" spellcheck="false">
+        </div>
+      </div>
+
+      <div class="dlg-options-row">
+        <label class="dlg-checkbox-label">
+          <input type="checkbox" id="dlg-chk-show" checked>
+          <span>Always show this dialog for captured downloads</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Footer Buttons -->
+    <div class="dlg-footer">
+      <div class="dlg-footer-left">
+        <span class="dlg-daemon-status" id="dlg-status">● Connecting to mDm…</span>
+      </div>
+      <div class="dlg-buttons">
+        <button type="button" id="btn-start" class="dlg-btn-primary">Start Download</button>
+        <button type="button" id="btn-cancel" class="dlg-btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="dialog.js"></script>
+</body>
+</html>

@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>mDm Helper</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-wrap">
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <svg class="mascot-ico" viewBox="0 0 120 120">
+          <defs>
+            <radialGradient id="g-pop-mascot" cx="0.5" cy="0.5" r="0.75">
+              <stop offset="0" stop-color="#f2a95c"/>
+              <stop offset="1" stop-color="#c96a2e"/>
+            </radialGradient>
+          </defs>
+          <circle cx="60" cy="62" r="44" fill="url(#g-pop-mascot)"/>
+          <circle cx="46" cy="44" r="6.5" fill="#141820"/>
+          <circle cx="74" cy="44" r="6.5" fill="#141820"/>
+          <circle cx="48" cy="42" r="2" fill="#fff"/>
+          <circle cx="76" cy="42" r="2" fill="#fff"/>
+          <path d="M47 57 Q60 66 73 57" stroke="#141820" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+          <rect x="54.5" y="70" width="11" height="16" rx="5.5" fill="#141820"/>
+          <path d="M42 80 h36 L60 97 Z" fill="#141820"/>
+        </svg>
+        <div class="brand-names">
+          <b>mDm</b>
+          <small>Download Manager</small>
+        </div>
+      </div>
+      <div class="status-pill" id="status-pill">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-text">Checking…</span>
+      </div>
+    </header>
+
+    <!-- Quick Download Box -->
+    <section class="section">
+      <div class="sec-title">Quick Download</div>
+      <form id="quick-form" class="quick-form">
+        <div class="input-wrap">
+          <input type="text" id="quick-url" placeholder="Paste link, video URL, or torrent…" spellcheck="false" required>
+          <button type="button" id="btn-paste" class="btn-paste" title="Paste from clipboard">Paste</button>
+        </div>
+        <div class="options-row">
+          <select id="quick-format" class="quick-select">
+            <option value="auto">Best Quality (Auto)</option>
+            <option value="1080p">1080p Full HD</option>
+            <option value="720p">720p HD</option>
+            <option value="audio">Audio Only (MP3)</option>
+          </select>
+          <button type="submit" id="btn-download" class="btn-download">Download</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Live Activity / Daemon Card -->
+    <section class="activity-card" id="activity-card" style="display:none;">
+      <div class="act-header">
+        <span class="act-label">Live Activity</span>
+        <button type="button" class="btn-open-app" id="btn-open-app" title="Bring mDm to front">Open App ↗</button>
+      </div>
+      <div class="act-stats">
+        <div class="act-stat">
+          <small>Active</small>
+          <b id="act-active">0</b>
+        </div>
+        <div class="act-stat">
+          <small>Download</small>
+          <b class="col-down" id="act-down">0 B/s</b>
+        </div>
+        <div class="act-stat">
+          <small>Upload</small>
+          <b class="col-up" id="act-up">0 B/s</b>
+        </div>
+      </div>
+    </section>
+
+    <!-- Captured Media On This Tab -->
+    <section class="section">
+      <div class="sec-header">
+        <div class="sec-title">Media on this Page</div>
+        <span class="media-count" id="media-count">0 found</span>
+      </div>
+      <div class="media-list" id="media-list">
+        <div class="empty-media" id="empty-media">No stream captured yet. Play a video on this page to detect.</div>
+      </div>
+    </section>
+
+    <!-- IDM File Types & Capture Settings -->
+    <section class="section">
+      <div class="sec-header">
+        <div class="sec-title">Capture &amp; File Types</div>
+        <button type="button" class="btn-toggle-cfg" id="btn-toggle-cfg" title="Configure captured file extensions">Settings ⚙</button>
+      </div>
+
+      <div class="cfg-panel" id="cfg-panel" style="display:none;">
+        <label class="cfg-toggle-row">
+          <input type="checkbox" id="cfg-intercept" checked>
+          <span>Automatically capture browser downloads</span>
+        </label>
+        <label class="cfg-toggle-row">
+          <input type="checkbox" id="cfg-dialog" checked>
+          <span>Show IDM download confirmation dialog</span>
+        </label>
+
+        <div class="cfg-field">
+          <div class="cfg-field-head">
+            <span class="cfg-field-label">File types to catch:</span>
+            <button type="button" class="btn-reset-ext" id="btn-reset-ext">Reset</button>
+          </div>
+          <textarea id="cfg-extensions" class="cfg-textarea" rows="3" spellcheck="false" placeholder="EXE ZIP RAR 7Z MP4 MP3 PDF..."></textarea>
+          <small class="cfg-note">Space-separated extensions automatically intercepted from browser.</small>
+        </div>
+
+        <button type="button" class="btn-save-cfg" id="btn-save-cfg">Save Extension Settings</button>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <span>Daemon: <code>127.0.0.1:5757</code></span>
+      <span id="version-tag">v0.1.0-alpha.1</span>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
