@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 mdm-core = { workspace = true }
+mdm-bins = { workspace = true }
 mdm-engine-ytdlp = { workspace = true }
 mdm-engine-aria2 = { workspace = true }
 axum.workspace = true

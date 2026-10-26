@@ -61,7 +61,10 @@ pub fn sha_line(sums: &str, name: &str) -> Option<String> {
 }
 
 pub async fn run_version(bin: &Path) -> String {
-    let out = tokio::process::Command::new(bin).arg("--version").output().await;
+    let mut cmd = tokio::process::Command::new(bin);
+    #[cfg(windows)]
+    cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    let out = cmd.arg("--version").output().await;
     match out {
         Ok(out) => {
             let stdout_line = String::from_utf8_lossy(&out.stdout)

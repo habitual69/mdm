@@ -1,5 +1,9 @@
 /target
 /dist
+/bin
+/mdm-app/src-tauri/bin
+*.exe
+*.dll
 *.log
 *.sqlite3
 *.sqlite3-*

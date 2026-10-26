@@ -21,11 +21,41 @@ const MASCOT_SVG = `
 `;
 
 const QUALITY_PRESETS = [
-  { label: "Best Video Quality", badge: "AUTO", format: null, kind: "video", icon: "🎬" },
-  { label: "1080p Full HD", badge: "1080p", format: "bv*[height<=1080]+ba/b[height<=1080]/b", kind: "video", icon: "📺" },
-  { label: "720p HD", badge: "720p", format: "bv*[height<=720]+ba/b[height<=720]/b", kind: "video", icon: "📺" },
-  { label: "480p SD", badge: "480p", format: "bv*[height<=480]+ba/b[height<=480]/b", kind: "video", icon: "📺" },
-  { label: "Audio Only (MP3)", badge: "AUDIO", format: "bestaudio", kind: "audio", icon: "🎵" },
+  {
+    label: "Best Video Quality",
+    badge: "AUTO",
+    format: null,
+    kind: "video",
+    icon: `<svg viewBox="0 0 24 24" class="mdm-fmt-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></svg>`,
+  },
+  {
+    label: "1080p Full HD",
+    badge: "1080p",
+    format: "bv*[height<=1080]+ba/b[height<=1080]/b",
+    kind: "video",
+    icon: `<svg viewBox="0 0 24 24" class="mdm-fmt-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>`,
+  },
+  {
+    label: "720p HD",
+    badge: "720p",
+    format: "bv*[height<=720]+ba/b[height<=720]/b",
+    kind: "video",
+    icon: `<svg viewBox="0 0 24 24" class="mdm-fmt-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>`,
+  },
+  {
+    label: "480p SD",
+    badge: "480p",
+    format: "bv*[height<=480]+ba/b[height<=480]/b",
+    kind: "video",
+    icon: `<svg viewBox="0 0 24 24" class="mdm-fmt-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>`,
+  },
+  {
+    label: "Audio Only (MP3)",
+    badge: "AUDIO",
+    format: "bestaudio",
+    kind: "audio",
+    icon: `<svg viewBox="0 0 24 24" class="mdm-fmt-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`,
+  },
 ];
 
 let activeDropdown = null;
@@ -163,39 +193,37 @@ function attachIdmWidget(videoEl) {
 
   const widget = document.createElement("div");
   widget.className = "mdm-idm-widget";
-  widget.title = "Download this video with mDm (Click to choose quality, drag to move)";
+  widget.title = "Download this video with mDm (Click to download, drag to move)";
   widget.innerHTML = `
-    ${MASCOT_SVG}
-    <span class="mdm-widget-label">Download this video</span>
-    <svg class="mdm-widget-arrow" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+    <div class="mdm-widget-main" title="Download this video with mDm">
+      ${MASCOT_SVG}
+      <span class="mdm-widget-label">Download this video</span>
+    </div>
+    <div class="mdm-widget-divider"></div>
+    <div class="mdm-widget-arrow-btn" title="Select format & quality">
+      <svg class="mdm-widget-arrow" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
   `;
 
   widget._mdmVideo = videoEl;
   videoEl._mdmWidget = widget;
   activeWidgets.add(widget);
 
-  // Attach drag & isolated click handler
-  makeDraggable(widget, () => {
-    if (activeDropdown && activeDropdown.parentElement === widget) {
-      closeDropdown();
-      return;
-    }
-
-    closeDropdown();
-    openDropdown(widget, videoEl);
-  });
+  // Attach drag & click handling
+  makeDraggable(widget, videoEl);
 
   document.body.appendChild(widget);
   updateWidgetPosition(widget, videoEl);
 }
 
-function makeDraggable(widget, onClick) {
+function makeDraggable(widget, videoEl) {
   let isDown = false;
   let hasDragged = false;
   let startX = 0;
   let startY = 0;
   let initLeft = 0;
   let initTop = 0;
+  let clickedAction = "main"; // "main" or "arrow"
 
   widget.addEventListener("pointerdown", (e) => {
     if (e.button !== 0 || e.target.closest(".mdm-idm-dropdown")) return;
@@ -203,6 +231,12 @@ function makeDraggable(widget, onClick) {
     hasDragged = false;
     startX = e.clientX;
     startY = e.clientY;
+
+    if (e.target.closest(".mdm-widget-arrow-btn") || e.target.closest(".mdm-widget-arrow")) {
+      clickedAction = "arrow";
+    } else {
+      clickedAction = "main";
+    }
 
     const rect = widget.getBoundingClientRect();
     initLeft = rect.left;
@@ -247,7 +281,26 @@ function makeDraggable(widget, onClick) {
           };
         }
       } else {
-        onClick(ue);
+        ue.stopPropagation();
+        ue.stopImmediatePropagation();
+        ue.preventDefault();
+
+        if (clickedAction === "arrow") {
+          if (activeDropdown && activeDropdown.parentElement === widget) {
+            closeDropdown();
+          } else {
+            closeDropdown();
+            openDropdown(widget, videoEl);
+          }
+        } else {
+          // User clicked "Download this video" or mascot:
+          // Immediately trigger download dialog with default/best quality!
+          closeDropdown();
+          const currentUrl = getVideoUrl(videoEl);
+          const pageTitle = document.title || "Video";
+          console.log("[mDm] 'Download this video' clicked for URL:", currentUrl);
+          triggerDownload(currentUrl, "video", null, pageTitle);
+        }
       }
     };
 
@@ -468,46 +521,117 @@ function getVideoUrl(videoEl) {
 }
 
 function triggerDownload(url, kind, format, title) {
-  showToast("Sending to mDm...", title || url, false);
-  chrome.runtime.sendMessage(
-    {
-      action: "SEND_TO_MDM",
-      payload: { url, kind, format, title },
-    },
-    (res) => {
-      if (chrome.runtime.lastError || !res || !res.ok) {
-        const err = res?.error || "Could not connect to mDm desktop app at 127.0.0.1:5757. Launch mDm to start.";
-        showToast("mDm Download Failed", err, true);
-      } else {
-        showToast("Download Started!", `Sent to mDm: ${title || url}`, false);
+  // Check settings to see if download confirmation dialog is enabled
+  chrome.storage.sync.get({ showDownloadDialog: true }, (cfg) => {
+    if (cfg.showDownloadDialog !== false) {
+      showToast("Opening Download Dialog", title || url, "dialog");
+      try {
+        chrome.runtime.sendMessage({
+          action: "TRIGGER_DOWNLOAD_DIALOG",
+          payload: {
+            url,
+            kind,
+            format,
+            title,
+            referrer: location.href,
+          },
+        });
+      } catch (e) {
+        console.warn("[mDm] Error sending TRIGGER_DOWNLOAD_DIALOG:", e);
+      }
+    } else {
+      showToast("Sending to mDm…", title || url, "start");
+      try {
+        chrome.runtime.sendMessage(
+          {
+            action: "SEND_TO_MDM",
+            payload: { url, kind, format, title },
+          },
+          (res) => {
+            if (chrome.runtime.lastError || !res || !res.ok) {
+              const err = res?.error || "Could not connect to mDm desktop app at 127.0.0.1:5757. Launch mDm to start.";
+              showToast("mDm Download Failed", err, "error");
+            } else {
+              showToast("Download Started", `Sent to mDm: ${title || url}`, "complete");
+            }
+          }
+        );
+      } catch (e) {
+        console.warn("[mDm] Error sending SEND_TO_MDM:", e);
       }
     }
-  );
+  });
 }
 
 // --- Toast Notifications ---------------------------------------------------
 
-function showToast(title, message, isError = false) {
+function showToast(title, message, type = "info") {
   const existing = document.querySelector(".mdm-toast");
   if (existing) existing.remove();
 
+  const isError = type === "error";
+  const isComplete = type === "complete";
+  const isStart = type === "start" || type === "downloading";
+  const isDialog = type === "dialog";
+
+  let statusBadge = "INFO";
+  let statusClass = "mdm-status-info";
+  let iconSvg = MASCOT_SVG;
+
+  if (isError) {
+    statusBadge = "FAILED";
+    statusClass = "mdm-status-error";
+    iconSvg = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10" stroke-opacity="0.3"/>
+        <line x1="15" y1="9" x2="9" y2="15"/>
+        <line x1="9" y1="9" x2="15" y2="15"/>
+      </svg>
+    `;
+  } else if (isComplete) {
+    statusBadge = "COMPLETED";
+    statusClass = "mdm-status-success";
+    iconSvg = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10" stroke-opacity="0.3"/>
+        <polyline points="8 12 11 15 16 9"/>
+      </svg>
+    `;
+  } else if (isStart) {
+    statusBadge = "DOWNLOADING";
+    statusClass = "mdm-status-start";
+    iconSvg = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="#e8934a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10" stroke-opacity="0.3"/>
+        <path d="M12 7v8"/>
+        <polyline points="9 12 12 15 15 12"/>
+      </svg>
+    `;
+  } else if (isDialog) {
+    statusBadge = "DIALOG";
+    statusClass = "mdm-status-dialog";
+    iconSvg = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10" stroke-opacity="0.3"/>
+        <rect x="7" y="7" width="10" height="10" rx="1.5"/>
+      </svg>
+    `;
+  }
+
   const toast = document.createElement("div");
-  toast.className = "mdm-toast";
-  if (isError) toast.style.borderColor = "#ef4444";
+  toast.className = `mdm-toast ${statusClass}`;
 
   toast.innerHTML = `
+    <div class="mdm-toast-indicator-bar"></div>
     <div class="mdm-toast-icon">
-      ${isError ? `
-        <svg viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
-          <circle cx="12" cy="12" r="10"/>
-          <line x1="12" y1="8" x2="12" y2="12"/>
-          <line x1="12" y1="16" x2="12.01" y2="16"/>
-        </svg>
-      ` : MASCOT_SVG}
+      ${iconSvg}
     </div>
     <div class="mdm-toast-body">
-      <span class="mdm-toast-title" style="color: ${isError ? "#ef4444" : "#e8934a"};">${title}</span>
-      <span class="mdm-toast-msg">${message}</span>
+      <div class="mdm-toast-header-row">
+        <span class="mdm-toast-title">${title}</span>
+        <span class="mdm-toast-badge">${statusBadge}</span>
+      </div>
+      <span class="mdm-toast-msg" title="${message}">${message}</span>
     </div>
   `;
 
@@ -643,7 +767,7 @@ document.addEventListener(
         },
       });
 
-      showToast("mDm Intercepted", `Sending to mDm: ${filename}`, false);
+      showToast("mDm Intercepted", `Sending to mDm: ${filename}`, "start");
     }
   },
   true

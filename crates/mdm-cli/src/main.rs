@@ -243,6 +243,11 @@ fn spawn_detached_daemon() -> Result<()> {
         use std::os::unix::process::CommandExt;
         cmd.process_group(0);
     }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
     cmd.spawn().context("spawn daemon")?;
     Ok(())
 }
@@ -454,7 +459,10 @@ async fn doctor() -> Result<()> {
         let found = mdm_core::bin_path(bin, &cfg);
         match found {
             Ok(p) => {
-                let ver = tokio::process::Command::new(&p)
+                let mut cmd = tokio::process::Command::new(&p);
+                #[cfg(windows)]
+                cmd.creation_flags(0x0800_0000);
+                let ver = cmd
                     .arg("--version")
                     .output()
                     .await

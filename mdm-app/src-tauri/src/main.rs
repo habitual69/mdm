@@ -71,6 +71,16 @@ fn ensure_port_free(addr: &str) {
                 .output();
             std::thread::sleep(std::time::Duration::from_millis(300));
         }
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            let script = "$conns = Get-NetTCPConnection -LocalPort 5757 -ErrorAction SilentlyContinue; foreach ($c in $conns) { Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue }";
+            let mut cmd = std::process::Command::new("powershell");
+            cmd.args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", script])
+                .creation_flags(0x0800_0000);
+            let _ = cmd.output();
+            std::thread::sleep(std::time::Duration::from_millis(300));
+        }
     }
 }
 
@@ -159,9 +169,20 @@ fn main() {
                                 let _ = w.minimize();
                             }
                         }
+                        mdm_server::WindowAction::Show => {
+                            if let Some(w) = handle_actions.get_webview_window("main") {
+                                let _ = w.show();
+                                let _ = w.unminimize();
+                                let _ = w.set_focus();
+                            }
+                        }
                         mdm_server::WindowAction::ToggleMaximize => {
                             if let Some(w) = handle_actions.get_webview_window("main") {
-                                if w.is_maximized().unwrap_or(false) {
+                                if !w.is_visible().unwrap_or(false) {
+                                    let _ = w.show();
+                                    let _ = w.unminimize();
+                                    let _ = w.set_focus();
+                                } else if w.is_maximized().unwrap_or(false) {
                                     let _ = w.unmaximize();
                                 } else {
                                     let _ = w.maximize();

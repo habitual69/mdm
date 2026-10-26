@@ -2297,6 +2297,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "futures-util",
+ "mdm-bins",
  "mdm-core",
  "mdm-engine-aria2",
  "mdm-engine-ytdlp",

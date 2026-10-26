@@ -33,9 +33,27 @@ const ENGINES: [&str; 3] = ["yt-dlp", "aria2c", "ffmpeg"];
 
 impl Installer {
     pub fn effective_bin_dir(cfg: &Config) -> PathBuf {
-        cfg.bin_dir
-            .clone()
-            .unwrap_or_else(|| mdm_core::data_dir().join("bin"))
+        if let Some(ref d) = cfg.bin_dir {
+            return d.clone();
+        }
+        // If running in an installed application directory, prefer the application's bin dir if writable
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(parent) = exe.parent() {
+                let candidate = if parent.file_name().and_then(|n| n.to_str()) == Some("bin") {
+                    parent.to_path_buf()
+                } else {
+                    parent.join("bin")
+                };
+                if candidate.is_dir() {
+                    let test_file = candidate.join(".perm_test");
+                    if std::fs::write(&test_file, b"").is_ok() {
+                        let _ = std::fs::remove_file(&test_file);
+                        return candidate;
+                    }
+                }
+            }
+        }
+        mdm_core::data_dir().join("bin")
     }
 
     pub fn new(cfg: &Config) -> Installer {
@@ -44,7 +62,8 @@ impl Installer {
         Installer {
             bin_dir,
             http: reqwest::Client::builder()
-                .user_agent("mdm-installer")
+                .user_agent("mdm-installer/0.1.0")
+                .timeout(std::time::Duration::from_secs(20))
                 .build()
                 .unwrap_or_default(),
         }
@@ -140,6 +159,36 @@ impl Installer {
     // --- yt-dlp ------------------------------------------------------------
 
     async fn install_ytdlp(&self) -> Result<(PathBuf, String, Option<bool>)> {
+        let bin_name = if cfg!(windows) { "yt-dlp.exe" } else { "yt-dlp" };
+        let target = self.bin_dir.join(bin_name);
+
+        // If target or existing yt-dlp exists, try yt-dlp -U first for fast atomic update
+        let candidate = if target.is_file() {
+            Some(target.clone())
+        } else {
+            mdm_core::find_bin("yt-dlp", Some(&[self.bin_dir.clone()]))
+        };
+
+        if let Some(ref p) = candidate {
+            let mut cmd = tokio::process::Command::new(p);
+            cmd.arg("-U");
+            #[cfg(windows)]
+            {
+                cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+            }
+            if let Ok(out) = cmd.output().await {
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                let combined = format!("{stdout} {stderr}");
+                if out.status.success() || combined.contains("up to date") || combined.contains("Updated yt-dlp") {
+                    let version = util::run_version(p).await;
+                    if !version.is_empty() {
+                        return Ok((p.clone(), version, None));
+                    }
+                }
+            }
+        }
+
         #[cfg(target_os = "windows")]
         let asset_name = "yt-dlp.exe";
         #[cfg(target_os = "macos")]

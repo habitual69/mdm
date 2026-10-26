@@ -109,7 +109,7 @@ fn is_exec(p: &PathBuf) -> bool {
     }
 }
 
-fn candidates(name: &str, extra: Option<&[PathBuf]>) -> Vec<PathBuf> {
+fn candidates(name: &str, extra: Option<&[PathBuf]>, include_path: bool) -> Vec<PathBuf> {
     let exe_names: Vec<String> = if cfg!(windows) {
         vec![format!("{name}.exe"), name.to_string()]
     } else {
@@ -120,8 +120,10 @@ fn candidates(name: &str, extra: Option<&[PathBuf]>) -> Vec<PathBuf> {
     if let Some(list) = extra {
         dirs.extend(list.iter().cloned());
     }
-    if let Ok(path) = std::env::var("PATH") {
-        dirs.extend(std::env::split_paths(&path));
+    if include_path {
+        if let Ok(path) = std::env::var("PATH") {
+            dirs.extend(std::env::split_paths(&path));
+        }
     }
 
     let mut out = Vec::new();
@@ -136,38 +138,79 @@ fn candidates(name: &str, extra: Option<&[PathBuf]>) -> Vec<PathBuf> {
     out
 }
 
-/// Locate an engine binary: `extra` dirs first (cfg.bin_dir), then mdm's own
-/// bin dir (~data/mdm/bin where auto-installs land), then PATH.
+/// Locate an engine binary:
+/// 1. Application-bundled directories (exe_dir, exe_dir/bin, exe_dir/resources/bin, exe_dir/resources)
+/// 2. Explicit `extra` dirs (cfg.bin_dir)
+/// 3. Application data bin dir (~data/mdm/bin or %APPDATA%/mdm/bin)
+/// 4. System PATH as fallback only.
 pub fn find_bin(name: &str, extra: Option<&[PathBuf]>) -> Option<PathBuf> {
-    let mut dirs: Vec<PathBuf> = extra.unwrap_or_default().to_vec();
+    let mut dirs: Vec<PathBuf> = Vec::new();
+
+    // 1. Check bundled directories relative to the running executable
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            dirs.push(dir.to_path_buf());
+            dirs.push(dir.join("bin"));
+            dirs.push(dir.join("resources").join("bin"));
+            dirs.push(dir.join("resources"));
+            // If running in development (target/debug or target/release), also inspect workspace roots
+            if let Some(target_dir) = dir.parent() {
+                if let Some(ws_root) = target_dir.parent() {
+                    dirs.push(ws_root.join("bin"));
+                    dirs.push(ws_root.join("mdm-app").join("src-tauri").join("bin"));
+                    dirs.push(ws_root.join("crates").join("mdm-bins").join("bin"));
+                }
+            }
+        }
+    }
+
+    // 2. Add extra dirs from config (cfg.bin_dir)
+    if let Some(list) = extra {
+        dirs.extend(list.iter().cloned());
+    }
+
+    // 3. User data directory (~/.local/share/mdm/bin or %APPDATA%/mdm/bin)
     dirs.push(crate::config::data_dir().join("bin"));
-    candidates(name, Some(&dirs)).into_iter().next()
+
+    // Check application-managed and bundled directories first (NO system PATH)
+    if let Some(found) = candidates(name, Some(&dirs), false).into_iter().next() {
+        return Some(found);
+    }
+
+    // 4. Fallback to system PATH only if no bundled or user-installed binary was found
+    candidates(name, None, true).into_iter().next()
 }
 
-/// Locate a JavaScript runtime (node, bun, deno) needed by yt-dlp to solve
+/// Locate a JavaScript runtime (node, bun, deno, quickjs) needed by yt-dlp to solve
 /// YouTube signature and player challenges.
 pub fn find_js_runtime() -> Option<PathBuf> {
-    // 1. Check helper bin directory (~/.local/share/mdm/bin/node)
-    let mdm_node = crate::config::data_dir().join("bin/node");
+    // 1. Check for bundled or installed JS runtimes (node, bun, deno, quickjs)
+    for js in ["node", "deno", "bun", "qjs"] {
+        if let Some(p) = find_bin(js, None) {
+            return Some(p);
+        }
+    }
+
+    // 2. Check helper bin directory with platform extension
+    let mdm_node = if cfg!(windows) {
+        crate::config::data_dir().join("bin/node.exe")
+    } else {
+        crate::config::data_dir().join("bin/node")
+    };
     if mdm_node.is_file() {
         return Some(mdm_node);
     }
-    // 2. Check standard PATH for node, bun, or deno
-    if let Some(p) = find_bin("node", None) {
-        return Some(p);
-    }
-    if let Some(p) = find_bin("bun", None) {
-        return Some(p);
-    }
-    if let Some(p) = find_bin("deno", None) {
-        return Some(p);
-    }
+
     // 3. Scan user environments (NVM, fnm, asdf, bun, deno)
     if let Some(home) = dirs::home_dir() {
         let nvm_pattern = home.join(".nvm/versions/node");
         if let Ok(entries) = std::fs::read_dir(&nvm_pattern) {
             for entry in entries.flatten() {
-                let candidate = entry.path().join("bin").join("node");
+                let candidate = if cfg!(windows) {
+                    entry.path().join("bin").join("node.exe")
+                } else {
+                    entry.path().join("bin").join("node")
+                };
                 if candidate.is_file() {
                     return Some(candidate);
                 }
@@ -175,12 +218,17 @@ pub fn find_js_runtime() -> Option<PathBuf> {
         }
         let common = [
             home.join(".fnm/current/bin/node"),
+            home.join(".fnm/current/bin/node.exe"),
             home.join(".asdf/shims/node"),
             home.join(".bun/bin/bun"),
+            home.join(".bun/bin/bun.exe"),
             home.join(".deno/bin/deno"),
+            home.join(".deno/bin/deno.exe"),
             home.join(".local/bin/node"),
             PathBuf::from("/usr/local/bin/node"),
             PathBuf::from("/usr/bin/node"),
+            PathBuf::from(r"C:\Program Files\nodejs\node.exe"),
+            PathBuf::from(r"C:\Program Files (x86)\nodejs\node.exe"),
         ];
         for c in common {
             if c.is_file() {

@@ -34,6 +34,7 @@ pub enum WindowAction {
     Close,
     ToggleFloating,
     ResizeFloating { width: f64, height: f64 },
+    Show,
 }
 
 #[derive(Clone)]
@@ -73,12 +74,18 @@ pub fn router_with_window(
         .route("/api/window/minimize", post(window_minimize))
         .route("/api/window/maximize", post(window_maximize))
         .route("/api/window/close", post(window_close))
+        .route("/api/window/show", post(window_show))
         .route("/api/window/toggle-floating", post(window_toggle_floating))
         .route("/api/window/resize-floating", post(window_resize_floating))
         .route("/api/window/state", get(window_state))
         .route("/api/media-info", post(media_info))
         .route("/api/playlist-info", post(playlist_info))
         .route("/api/jobs/batch", post(batch_add_jobs))
+        .route("/api/bins/status", get(get_bins_status))
+        .route("/api/bins/update", post(update_bin))
+        .route("/api/extension/status", get(get_extension_status))
+        .route("/api/extension/open-browser", post(open_browser_extension))
+        .route("/api/extension/open-folder", post(open_extension_folder))
         .layer(cors)
         .with_state(AppState { queue: q, window_tx })
 }
@@ -142,7 +149,7 @@ fn spawn_notification_watcher(q: Arc<Queue>) {
                                 .map(|p| p.display().to_string())
                                 .unwrap_or_default();
                             send_system_notification(
-                                "mDm — Download Complete",
+                                "Download Complete — mDm",
                                 &format!("{title}\nSaved to: {out}"),
                                 None,
                             );
@@ -153,7 +160,7 @@ fn spawn_notification_watcher(q: Arc<Queue>) {
                             let title = job.title.as_deref().unwrap_or("Download Failed");
                             let err = job.error.as_deref().unwrap_or("Encountered an error");
                             send_system_notification(
-                                "mDm — Download Failed",
+                                "Download Failed — mDm",
                                 &format!("{title}\n{err}"),
                                 None,
                             );
@@ -228,6 +235,15 @@ async fn window_close(State(st): State<AppState>) -> StatusCode {
     }
 }
 
+async fn window_show(State(st): State<AppState>) -> StatusCode {
+    if let Some(tx) = &st.window_tx {
+        let _ = tx.send(WindowAction::Show);
+        StatusCode::OK
+    } else {
+        StatusCode::NOT_IMPLEMENTED
+    }
+}
+
 async fn window_toggle_floating(State(st): State<AppState>) -> StatusCode {
     if let Some(tx) = &st.window_tx {
         let _ = tx.send(WindowAction::ToggleFloating);
@@ -262,6 +278,87 @@ async fn window_state(State(st): State<AppState>) -> Json<serde_json::Value> {
     Json(json!({
         "is_desktop": st.window_tx.is_some(),
     }))
+}
+
+// --- binary management -----------------------------------------------------
+
+#[derive(serde::Deserialize)]
+struct UpdateBinReq {
+    name: String,
+}
+
+async fn get_bins_status(State(st): State<AppState>) -> Json<Vec<mdm_bins::BinStatus>> {
+    let cfg = st.queue.config();
+    let installer = mdm_bins::Installer::new(&cfg);
+    Json(installer.status_all(&cfg).await)
+}
+
+async fn update_bin(
+    State(st): State<AppState>,
+    Json(req): Json<UpdateBinReq>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let cfg = st.queue.config();
+    let installer = mdm_bins::Installer::new(&cfg);
+    let target = req.name.trim();
+    if target != "yt-dlp" && target != "aria2c" && target != "ffmpeg" {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "error": format!("unsupported binary: {target}")
+            })),
+        );
+    }
+    let res = installer.install(target).await;
+    match res.action {
+        mdm_bins::BinAction::Installed { version, path, sha_ok } => {
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "ok": true,
+                    "name": target,
+                    "version": version,
+                    "path": path,
+                    "sha_ok": sha_ok,
+                    "message": format!("Successfully updated {target} to {version}")
+                })),
+            )
+        }
+        mdm_bins::BinAction::AlreadyOk { version, path } => {
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "ok": true,
+                    "name": target,
+                    "version": version,
+                    "path": path,
+                    "message": format!("{target} is already up to date ({version})")
+                })),
+            )
+        }
+        mdm_bins::BinAction::Failed { error } => {
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "ok": false,
+                    "name": target,
+                    "error": error.clone(),
+                    "message": format!("Update failed: {error}")
+                })),
+            )
+        }
+        mdm_bins::BinAction::Skipped { reason } => {
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "ok": false,
+                    "name": target,
+                    "error": reason.clone(),
+                    "message": format!("Update skipped: {reason}")
+                })),
+            )
+        }
+    }
 }
 
 // --- media info ------------------------------------------------------------
@@ -316,14 +413,28 @@ async fn media_info(
     };
 
     let mut cmd = tokio::process::Command::new(ytdlp_path);
-    cmd.args(["--dump-single-json", "--no-warnings", "--no-config", "--flat-playlist"]);
+    #[cfg(windows)]
+    cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    cmd.args(["--dump-single-json", "--no-warnings", "--no-config", "--no-check-certificates", "--flat-playlist"]);
+
+    if url.contains("youtube.com") || url.contains("youtu.be") {
+        cmd.args(["--extractor-args", "youtube:player_client=default,web,android"]);
+    }
 
     if let Some(ref js) = mdm_core::find_js_runtime() {
         let name = js.file_stem().and_then(|s| s.to_str()).unwrap_or("node");
         cmd.args(["--js-runtimes", &format!("{name}:{}", js.display())]);
     }
 
-    let mut path_dirs = vec![mdm_core::data_dir().join("bin")];
+    let mut path_dirs = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            path_dirs.push(parent.join("bin"));
+            path_dirs.push(parent.join("resources").join("bin"));
+            path_dirs.push(parent.to_path_buf());
+        }
+    }
+    path_dirs.push(mdm_core::data_dir().join("bin"));
     if let Some(ref js) = mdm_core::find_js_runtime() {
         if let Some(parent) = js.parent() {
             if !path_dirs.contains(&parent.to_path_buf()) {
@@ -476,14 +587,28 @@ async fn playlist_info(
     };
 
     let mut cmd = tokio::process::Command::new(ytdlp_path);
-    cmd.args(["--dump-single-json", "--no-warnings", "--no-config", "--flat-playlist"]);
+    #[cfg(windows)]
+    cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    cmd.args(["--dump-single-json", "--no-warnings", "--no-config", "--no-check-certificates", "--flat-playlist"]);
+
+    if url.contains("youtube.com") || url.contains("youtu.be") {
+        cmd.args(["--extractor-args", "youtube:player_client=default,web,android"]);
+    }
 
     if let Some(ref js) = mdm_core::find_js_runtime() {
         let name = js.file_stem().and_then(|s| s.to_str()).unwrap_or("node");
         cmd.args(["--js-runtimes", &format!("{name}:{}", js.display())]);
     }
 
-    let mut path_dirs = vec![mdm_core::data_dir().join("bin")];
+    let mut path_dirs = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            path_dirs.push(parent.join("bin"));
+            path_dirs.push(parent.join("resources").join("bin"));
+            path_dirs.push(parent.to_path_buf());
+        }
+    }
+    path_dirs.push(mdm_core::data_dir().join("bin"));
     if let Some(ref js) = mdm_core::find_js_runtime() {
         if let Some(parent) = js.parent() {
             if !path_dirs.contains(&parent.to_path_buf()) {
@@ -985,9 +1110,15 @@ async fn resume_all_jobs(
 fn reveal_in_folder(path: &std::path::Path) -> std::io::Result<()> {
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("explorer")
-            .arg(format!("/select,\"{}\"", path.display()))
-            .spawn()?;
+        use std::os::windows::process::CommandExt;
+        let mut cmd = std::process::Command::new("explorer.exe");
+        let norm = path.to_string_lossy().replace('/', "\\");
+        if path.is_file() {
+            cmd.raw_arg(format!("/select,\"{norm}\""));
+        } else {
+            cmd.raw_arg(format!("\"{norm}\""));
+        }
+        cmd.spawn()?;
     }
     #[cfg(target_os = "macos")]
     {
@@ -1068,7 +1199,18 @@ async fn open_job_folder(
     };
 
     if !target_path.exists() {
-        return Err((StatusCode::NOT_FOUND, format!("path does not exist: {}", target_path.display())));
+        if let Some(parent) = target_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+            if parent.exists() {
+                return reveal_in_folder(parent)
+                    .map(|_| StatusCode::OK)
+                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to open file manager: {e}")));
+            }
+        }
+        let _ = std::fs::create_dir_all(&job.output_dir);
+        return reveal_in_folder(&job.output_dir)
+            .map(|_| StatusCode::OK)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("failed to open file manager: {e}")));
     }
 
     reveal_in_folder(&target_path)
@@ -1124,6 +1266,262 @@ async fn ws_forward(mut socket: WebSocket, st: AppState) {
             }
         }
     }
+}
+
+// --- browser extension management & detection -----------------------------
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DetectedBrowser {
+    pub id: String,
+    pub name: String,
+    pub installed: bool,
+    pub exe_path: Option<String>,
+    pub extensions_url: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ExtensionStatusResp {
+    pub folder_exists: bool,
+    pub folder_path: Option<String>,
+    pub manifest_exists: bool,
+    pub version: Option<String>,
+    pub browsers: Vec<DetectedBrowser>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct OpenBrowserReq {
+    pub browser: String,
+}
+
+fn find_extension_dir() -> Option<std::path::PathBuf> {
+    // 1. Next to current executable (installed or portable package)
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            let candidate = parent.join("extension");
+            if candidate.join("manifest.json").exists() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    // 2. Current working directory or relative project roots
+    if let Ok(cwd) = std::env::current_dir() {
+        let candidate = cwd.join("extension");
+        if candidate.join("manifest.json").exists() {
+            return Some(candidate);
+        }
+        if let Some(p) = cwd.parent() {
+            let candidate = p.join("extension");
+            if candidate.join("manifest.json").exists() {
+                return Some(candidate);
+            }
+            if let Some(gp) = p.parent() {
+                let candidate = gp.join("extension");
+                if candidate.join("manifest.json").exists() {
+                    return Some(candidate);
+                }
+            }
+        }
+    }
+
+    // 3. Fallback to default user install path (%LOCALAPPDATA%\Programs\mDm\extension)
+    if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+        let candidate = std::path::PathBuf::from(local_app_data)
+            .join("Programs")
+            .join("mDm")
+            .join("extension");
+        if candidate.join("manifest.json").exists() {
+            return Some(candidate);
+        }
+    }
+
+    None
+}
+
+fn detect_installed_browsers() -> Vec<DetectedBrowser> {
+    let mut browsers = Vec::new();
+
+    #[cfg(target_os = "windows")]
+    {
+        let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default();
+        let prog_files = std::env::var("ProgramFiles").unwrap_or_default();
+        let prog_files_x86 = std::env::var("ProgramFiles(x86)").unwrap_or_default();
+
+        // 1. Google Chrome
+        let chrome_candidates = [
+            format!("{local_app_data}\\Google\\Chrome\\Application\\chrome.exe"),
+            format!("{prog_files}\\Google\\Chrome\\Application\\chrome.exe"),
+            format!("{prog_files_x86}\\Google\\Chrome\\Application\\chrome.exe"),
+        ];
+        let chrome_path = chrome_candidates.into_iter().find(|p| std::path::Path::new(p).exists());
+        browsers.push(DetectedBrowser {
+            id: "chrome".to_string(),
+            name: "Google Chrome".to_string(),
+            installed: chrome_path.is_some(),
+            exe_path: chrome_path,
+            extensions_url: "chrome://extensions".to_string(),
+        });
+
+        // 2. Microsoft Edge
+        let edge_candidates = [
+            format!("{prog_files_x86}\\Microsoft\\Edge\\Application\\msedge.exe"),
+            format!("{prog_files}\\Microsoft\\Edge\\Application\\msedge.exe"),
+            format!("{local_app_data}\\Microsoft\\Edge\\Application\\msedge.exe"),
+        ];
+        let edge_path = edge_candidates.into_iter().find(|p| std::path::Path::new(p).exists());
+        browsers.push(DetectedBrowser {
+            id: "edge".to_string(),
+            name: "Microsoft Edge".to_string(),
+            installed: edge_path.is_some(),
+            exe_path: edge_path,
+            extensions_url: "edge://extensions".to_string(),
+        });
+
+        // 3. Brave
+        let brave_candidates = [
+            format!("{local_app_data}\\BraveSoftware\\Brave-Browser\\Application\\brave.exe"),
+            format!("{prog_files}\\BraveSoftware\\Brave-Browser\\Application\\brave.exe"),
+            format!("{prog_files_x86}\\BraveSoftware\\Brave-Browser\\Application\\brave.exe"),
+        ];
+        let brave_path = brave_candidates.into_iter().find(|p| std::path::Path::new(p).exists());
+        browsers.push(DetectedBrowser {
+            id: "brave".to_string(),
+            name: "Brave Browser".to_string(),
+            installed: brave_path.is_some(),
+            exe_path: brave_path,
+            extensions_url: "brave://extensions".to_string(),
+        });
+
+        // 4. Opera
+        let opera_candidates = [
+            format!("{local_app_data}\\Programs\\Opera\\launcher.exe"),
+            format!("{prog_files}\\Opera\\launcher.exe"),
+            format!("{prog_files_x86}\\Opera\\launcher.exe"),
+        ];
+        let opera_path = opera_candidates.into_iter().find(|p| std::path::Path::new(p).exists());
+        browsers.push(DetectedBrowser {
+            id: "opera".to_string(),
+            name: "Opera".to_string(),
+            installed: opera_path.is_some(),
+            exe_path: opera_path,
+            extensions_url: "opera://extensions".to_string(),
+        });
+
+        // 5. Vivaldi
+        let vivaldi_candidates = [
+            format!("{local_app_data}\\Vivaldi\\Application\\vivaldi.exe"),
+            format!("{prog_files}\\Vivaldi\\Application\\vivaldi.exe"),
+        ];
+        let vivaldi_path = vivaldi_candidates.into_iter().find(|p| std::path::Path::new(p).exists());
+        browsers.push(DetectedBrowser {
+            id: "vivaldi".to_string(),
+            name: "Vivaldi".to_string(),
+            installed: vivaldi_path.is_some(),
+            exe_path: vivaldi_path,
+            extensions_url: "vivaldi://extensions".to_string(),
+        });
+
+        // 6. Mozilla Firefox
+        let firefox_candidates = [
+            format!("{prog_files}\\Mozilla Firefox\\firefox.exe"),
+            format!("{prog_files_x86}\\Mozilla Firefox\\firefox.exe"),
+        ];
+        let firefox_path = firefox_candidates.into_iter().find(|p| std::path::Path::new(p).exists());
+        browsers.push(DetectedBrowser {
+            id: "firefox".to_string(),
+            name: "Mozilla Firefox".to_string(),
+            installed: firefox_path.is_some(),
+            exe_path: firefox_path,
+            extensions_url: "about:addons".to_string(),
+        });
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        browsers.push(DetectedBrowser {
+            id: "chrome".to_string(),
+            name: "Google Chrome".to_string(),
+            installed: true,
+            exe_path: Some("google-chrome".to_string()),
+            extensions_url: "chrome://extensions".to_string(),
+        });
+    }
+
+    browsers
+}
+
+async fn get_extension_status() -> Result<Json<ExtensionStatusResp>, (StatusCode, String)> {
+    let ext_dir = find_extension_dir();
+    let folder_exists = ext_dir.is_some();
+    let manifest_exists = ext_dir.as_ref().map(|p| p.join("manifest.json").exists()).unwrap_or(false);
+
+    let mut version = None;
+    if let Some(ref dir) = ext_dir {
+        let manifest_file = dir.join("manifest.json");
+        if let Ok(content) = std::fs::read_to_string(&manifest_file) {
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+                version = val.get("version").and_then(|v| v.as_str()).map(|s| s.to_string());
+            }
+        }
+    }
+
+    let browsers = detect_installed_browsers();
+    let folder_path = ext_dir.map(|p| p.to_string_lossy().to_string());
+
+    Ok(Json(ExtensionStatusResp {
+        folder_exists,
+        folder_path,
+        manifest_exists,
+        version,
+        browsers,
+    }))
+}
+
+async fn open_browser_extension(
+    Json(req): Json<OpenBrowserReq>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let browsers = detect_installed_browsers();
+    let target = browsers.into_iter().find(|b| b.id.eq_ignore_ascii_case(&req.browser) || b.name.eq_ignore_ascii_case(&req.browser))
+        .ok_or((StatusCode::NOT_FOUND, format!("Browser '{}' not found or unsupported", req.browser)))?;
+
+    let exe = target.exe_path.ok_or((StatusCode::BAD_REQUEST, format!("{} is not installed on this system", target.name)))?;
+
+    // Reveal extension directory in Explorer so user can easily drag-and-drop or select it
+    if let Some(ext_dir) = find_extension_dir() {
+        let _ = reveal_in_folder(&ext_dir);
+    }
+
+    // Launch the browser with its extensions URL
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new(&exe)
+            .arg(&target.extensions_url)
+            .spawn()
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to launch {}: {e}", target.name)))?;
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        std::process::Command::new(&exe)
+            .arg(&target.extensions_url)
+            .spawn()
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to launch {}: {e}", target.name)))?;
+    }
+
+    Ok(Json(json!({
+        "ok": true,
+        "browser": target.name,
+        "url": target.extensions_url,
+        "message": format!("Launched {} and revealed extension folder in Explorer", target.name)
+    })))
+}
+
+async fn open_extension_folder() -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let ext_dir = find_extension_dir().ok_or((StatusCode::NOT_FOUND, "Extension folder not found on disk".to_string()))?;
+    reveal_in_folder(&ext_dir).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to open folder: {e}")))?;
+    Ok(Json(json!({
+        "ok": true,
+        "path": ext_dir.to_string_lossy().to_string()
+    })))
 }
 
 // Keep JobState referenced (Phase 1 okay) to avoid dead import warnings.

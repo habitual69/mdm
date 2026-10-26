@@ -120,10 +120,10 @@ function sendDownload(url, kind, format, title) {
     },
     (res) => {
       if (chrome.runtime.lastError || !res?.ok) {
-        btn.textContent = "Failed ✕";
+        btn.textContent = "Failed";
         alert(res?.error || "Cannot connect to mDm desktop app at 127.0.0.1:5757.");
       } else {
-        btn.textContent = "Sent ✓";
+        btn.textContent = "Sent!";
         $("quick-url").value = "";
       }
       setTimeout(() => { btn.textContent = origText; }, 1800);
@@ -161,7 +161,10 @@ $("btn-paste")?.addEventListener("click", async () => {
 });
 
 $("btn-open-app")?.addEventListener("click", () => {
-  fetch("http://127.0.0.1:5757/api/window/maximize", { method: "POST" }).catch(() => {});
+  fetch("http://127.0.0.1:5757/api/window/show", { method: "POST" })
+    .catch(() => {
+      fetch("http://127.0.0.1:5757/api/window/maximize", { method: "POST" }).catch(() => {});
+    });
 });
 
 // --- Capture & File Extension Settings ------------------------------------
@@ -199,7 +202,7 @@ $("btn-save-cfg")?.addEventListener("click", () => {
   };
 
   chrome.runtime.sendMessage({ action: "SAVE_SETTINGS", settings }, (res) => {
-    btn.textContent = "Saved ✓";
+    btn.textContent = "Saved!";
     setTimeout(() => {
       btn.textContent = "Save Extension Settings";
       $("cfg-panel").style.display = "none";

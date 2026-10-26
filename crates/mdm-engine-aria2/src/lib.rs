@@ -90,6 +90,11 @@ fn select_file_opts(job: &mdm_core::Job, cfg: &Config) -> serde_json::Value {
             "connect-timeout".into(),
             json!(cfg.aria2_connect_timeout.clamp(5, 300).to_string()),
         );
+        obj.insert("use-head".into(), json!("false"));
+        let ua = cfg.aria2_user_agent.trim();
+        if !ua.is_empty() && !ua.contains("146.0.0.0") {
+            obj.insert("user-agent".into(), json!(ua));
+        }
     }
     opts
 }

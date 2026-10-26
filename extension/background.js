@@ -61,35 +61,67 @@ function extractExtension(url, filename) {
   return m ? m[1].toLowerCase() : "";
 }
 
-function openDownloadDialog({ url, filename, size, referrer }) {
+function openDownloadDialog({ url, filename, size, kind, format, referrer, windowId }) {
   const dialogUrl = chrome.runtime.getURL(
-    `dialog.html?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename || "")}&size=${encodeURIComponent(size || 0)}`
+    `dialog.html?url=${encodeURIComponent(url || "")}&filename=${encodeURIComponent(filename || "")}&size=${encodeURIComponent(size || 0)}&kind=${encodeURIComponent(kind || "")}&format=${encodeURIComponent(format || "")}&referrer=${encodeURIComponent(referrer || "")}`
   );
 
-  const w = 520;
-  const h = 320;
+  const w = 580;
+  const h = 460;
 
-  chrome.windows.getCurrent((curWin) => {
-    const left = curWin && curWin.left !== undefined ? Math.round(curWin.left + (curWin.width - w) / 2) : 200;
-    const top = curWin && curWin.top !== undefined ? Math.round(curWin.top + (curWin.height - h) / 2) : 150;
+  const createDialogWindow = (curWin) => {
+    let left = 200;
+    let top = 150;
+    if (curWin && typeof curWin.left === "number" && typeof curWin.width === "number") {
+      left = Math.max(0, Math.round(curWin.left + (curWin.width - w) / 2));
+      top = Math.max(0, Math.round(curWin.top + (curWin.height - h) / 2));
+    }
 
-    chrome.windows.create(
-      {
-        url: dialogUrl,
-        type: "popup",
-        width: w,
-        height: h,
-        left: Math.max(0, left),
-        top: Math.max(0, top),
-        focused: true,
-      },
-      (win) => {
-        if (chrome.runtime.lastError || !win) {
-          chrome.tabs.create({ url: dialogUrl });
+    try {
+      chrome.windows.create(
+        {
+          url: dialogUrl,
+          type: "popup",
+          width: w,
+          height: h,
+          left,
+          top,
+          focused: true,
+        },
+        (win) => {
+          const createErr = chrome.runtime.lastError;
+          if (createErr || !win) {
+            console.warn("[mDm] chrome.windows.create popup failed, falling back to tab:", createErr);
+            chrome.tabs.create({ url: dialogUrl });
+          }
         }
+      );
+    } catch (err) {
+      console.warn("[mDm] Exception during chrome.windows.create, opening tab fallback:", err);
+      chrome.tabs.create({ url: dialogUrl });
+    }
+  };
+
+  if (windowId) {
+    chrome.windows.get(windowId, (win) => {
+      const _ = chrome.runtime.lastError;
+      if (win) {
+        createDialogWindow(win);
+      } else {
+        chrome.windows.getLastFocused({ populate: false }, (lastWin) => {
+          const __ = chrome.runtime.lastError;
+          createDialogWindow(lastWin);
+        });
       }
-    );
-  });
+    });
+  } else if (chrome.windows?.getLastFocused) {
+    chrome.windows.getLastFocused({ populate: false }, (win) => {
+      const _ = chrome.runtime.lastError;
+      createDialogWindow(win);
+    });
+  } else {
+    chrome.tabs.create({ url: dialogUrl });
+  }
 }
 
 // Intercept browser downloads when filename and mime are determined
@@ -204,11 +236,43 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     url = `https://${url}`;
   }
 
-  const res = await sendDownloadToMdm({ url, title: tab?.title });
-  if (res.ok) {
-    showNotification("mDm Download Started", `Sent to mDm: ${tab?.title || url}`);
+  // Extract a clean filename guess from URL
+  let filename = "";
+  try {
+    const u = new URL(url);
+    filename = decodeURIComponent(u.pathname.split("/").pop() || "");
+  } catch {
+    filename = url.split("?")[0].split("/").pop() || "";
+  }
+  if (!filename && tab?.title) {
+    filename = tab.title;
+  }
+
+  let kind = "direct";
+  if (info.menuItemId === "mdm_download_media") {
+    if (info.mediaType === "video") kind = "video";
+    else if (info.mediaType === "audio") kind = "audio";
+  } else if (info.menuItemId === "mdm_download_page") {
+    kind = "video";
+  }
+
+  // When "Download with mDm" is selected, open the download dialog box
+  if (showDialogEnabled) {
+    openDownloadDialog({
+      url,
+      filename,
+      size: 0,
+      kind,
+      referrer: tab?.url || "",
+      windowId: tab?.windowId,
+    });
   } else {
-    showNotification("mDm Download Failed", res.error || "Could not connect to mDm daemon at 127.0.0.1:5757");
+    const res = await sendDownloadToMdm({ url, title: filename, kind });
+    if (res.ok) {
+      showNotification("mDm Download Started", `Sent to mDm: ${filename || url}`, "start");
+    } else {
+      showNotification("mDm Download Failed", res.error || "Could not connect to mDm daemon at 127.0.0.1:5757", "error");
+    }
   }
 });
 
@@ -312,15 +376,17 @@ async function getNetscapeCookiesForUrl(url) {
   if (!chrome.cookies) return "";
   try {
     const parsed = new URL(url);
-    const cookies = await chrome.cookies.getAll({ url });
+    const cookies = await chrome.cookies.getAll({ url }).catch(() => []);
     const parts = parsed.hostname.split(".");
     let domainPattern = parsed.hostname;
     if (parts.length >= 2) {
-      domainPattern = "." + parts.slice(-2).join(".");
+      domainPattern = parts.slice(-2).join(".");
     }
-    const domainCookies = await chrome.cookies.getAll({ domain: domainPattern });
+    // Remove leading dot to comply with chrome.cookies API specifications
+    domainPattern = domainPattern.replace(/^\./, "");
+    const domainCookies = await chrome.cookies.getAll({ domain: domainPattern }).catch(() => []);
     const map = new Map();
-    for (const c of [...cookies, ...domainCookies]) {
+    for (const c of [...(cookies || []), ...(domainCookies || [])]) {
       map.set(`${c.domain}|${c.path}|${c.name}`, c);
     }
     if (map.size === 0) return "";
@@ -339,7 +405,7 @@ async function getNetscapeCookiesForUrl(url) {
   }
 }
 
-async function sendDownloadToMdm({ url, kind, format, title, cookies }) {
+async function sendDownloadToMdm({ url, kind, format, title, cookies, output_dir, downloadLater }) {
   try {
     let finalKind = kind;
     if (!finalKind) {
@@ -358,6 +424,7 @@ async function sendDownloadToMdm({ url, kind, format, title, cookies }) {
       format: format || undefined,
       title: title || undefined,
       cookies: cookieData || undefined,
+      output_dir: output_dir || undefined,
     };
     const res = await fetch(`${MDM_API_BASE}/api/jobs`, {
       method: "POST",
@@ -367,6 +434,11 @@ async function sendDownloadToMdm({ url, kind, format, title, cookies }) {
 
     if (res.ok) {
       const job = await res.json();
+      if (downloadLater && job?.id) {
+        try {
+          await fetch(`${MDM_API_BASE}/api/jobs/${job.id}/pause`, { method: "POST" });
+        } catch (_) {}
+      }
       return { ok: true, job };
     } else {
       const text = await res.text();
@@ -377,6 +449,25 @@ async function sendDownloadToMdm({ url, kind, format, title, cookies }) {
       ok: false,
       error: "mDm desktop app is not reachable. Please ensure mDm is running on 127.0.0.1:5757.",
     };
+  }
+}
+
+async function probeUrlHeaders(url) {
+  try {
+    const res = await fetch(url, { method: "HEAD", redirect: "follow" });
+    const contentLength = parseInt(res.headers.get("content-length") || "0", 10) || 0;
+    const contentType = res.headers.get("content-type") || "";
+    const disposition = res.headers.get("content-disposition") || "";
+    let filename = "";
+    if (disposition) {
+      const match = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i);
+      if (match && match[1]) {
+        filename = decodeURIComponent(match[1]);
+      }
+    }
+    return { ok: true, size: contentLength, contentType, filename };
+  } catch (err) {
+    return { ok: false, error: String(err) };
   }
 }
 
@@ -398,19 +489,48 @@ async function fetchMediaInfo(url) {
   }
 }
 
-function showNotification(title, message) {
-  chrome.notifications.create({
+function showNotification(title, message, status = "info") {
+  const statusLabels = {
+    start: "STATUS: DOWNLOADING",
+    complete: "STATUS: COMPLETED",
+    error: "STATUS: FAILED",
+    paused: "STATUS: QUEUED",
+    info: "STATUS: INFO",
+  };
+  const contextMessage = `mDm Download Manager • ${statusLabels[status] || "STATUS: ACTIVE"}`;
+
+  chrome.notifications.create(`mdm-${Date.now()}`, {
     type: "basic",
     iconUrl: "icons/icon128.png",
     title,
     message,
-    priority: 1,
+    contextMessage,
+    priority: 2,
+    silent: false,
   });
 }
 
 // --- Message Dispatcher ----------------------------------------------------
 
 chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
+  if (req.action === "PROBE_URL_SIZE") {
+    probeUrlHeaders(req.url).then(sendResponse);
+    return true; // async
+  }
+  if (req.action === "TRIGGER_DOWNLOAD_DIALOG") {
+    const { url, filename, title, size, kind, format, referrer } = req.payload || {};
+    openDownloadDialog({
+      url,
+      filename: filename || title || "",
+      size: size || 0,
+      kind,
+      format,
+      referrer: referrer || sender.tab?.url || "",
+      windowId: sender.tab?.windowId,
+    });
+    sendResponse({ ok: true });
+    return false;
+  }
   if (req.action === "INTERCEPT_LINK_CLICK") {
     const { url, filename, title } = req.payload;
     if (showDialogEnabled) {
@@ -419,11 +539,14 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
         filename: filename || "",
         size: 0,
         referrer: sender.tab?.url || "",
+        windowId: sender.tab?.windowId,
       });
     } else {
       sendDownloadToMdm({ url, title: filename || title, kind: "direct" }).then((res) => {
         if (res.ok) {
-          showNotification("mDm Download Started", `Downloading: ${filename || url}`);
+          showNotification("mDm Download Started", `Downloading: ${filename || url}`, "start");
+        } else {
+          showNotification("mDm Download Failed", res.error || "Connection error", "error");
         }
       });
     }

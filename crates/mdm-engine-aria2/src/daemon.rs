@@ -45,6 +45,7 @@ impl Aria2Daemon {
             "--continue=true".into(),
             "--always-resume=true".into(),
             "--auto-file-renaming=false".into(),
+            "--use-head=false".into(),
             format!("--save-session={}", session_file.display()),
             "--save-session-interval=30".into(),
             format!("--input-file={}", session_file.display()),
@@ -74,8 +75,9 @@ impl Aria2Daemon {
             ));
         }
         args.push(format!("--bt-max-peers={}", cfg.aria2_bt_max_peers.min(500)));
-        if !cfg.aria2_user_agent.trim().is_empty() {
-            args.push(format!("--user-agent={}", cfg.aria2_user_agent.trim()));
+        let ua = cfg.aria2_user_agent.trim();
+        if !ua.is_empty() && !ua.contains("146.0.0.0") {
+            args.push(format!("--user-agent={ua}"));
         }
         if !cfg.aria2_custom_tracker_url.trim().is_empty() {
             args.push(format!("--bt-tracker={}", cfg.aria2_custom_tracker_url.trim()));

@@ -55,13 +55,40 @@ impl Ytdlp {
         let mut cmd = tokio::process::Command::new(&self.bin);
         #[cfg(unix)]
         cmd.process_group(0);
+        #[cfg(windows)]
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
         let _ = std::fs::create_dir_all(&job.output_dir);
         cmd.current_dir(&job.output_dir);
 
-        // Enrich PATH so yt-dlp can locate node/aria2c even when launched from GUI environments
-        let mut path_dirs = vec![
-            mdm_core::data_dir().join("bin"),
-        ];
+        // Enrich PATH so yt-dlp can locate bundled binaries (aria2c, ffmpeg, node)
+        let mut path_dirs = Vec::new();
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(parent) = exe.parent() {
+                path_dirs.push(parent.join("bin"));
+                path_dirs.push(parent.join("resources").join("bin"));
+                path_dirs.push(parent.to_path_buf());
+            }
+        }
+        if let Some(parent) = self.bin.parent() {
+            if !path_dirs.contains(&parent.to_path_buf()) {
+                path_dirs.push(parent.to_path_buf());
+            }
+        }
+        if let Ok(ref aria2_path) = bin_path("aria2c", &ctx.cfg) {
+            if let Some(parent) = aria2_path.parent() {
+                if !path_dirs.contains(&parent.to_path_buf()) {
+                    path_dirs.push(parent.to_path_buf());
+                }
+            }
+        }
+        if let Ok(ref ffmpeg_path) = bin_path("ffmpeg", &ctx.cfg) {
+            if let Some(parent) = ffmpeg_path.parent() {
+                if !path_dirs.contains(&parent.to_path_buf()) {
+                    path_dirs.push(parent.to_path_buf());
+                }
+            }
+        }
+        path_dirs.push(mdm_core::data_dir().join("bin"));
         if let Some(ref js) = find_js_runtime() {
             if let Some(parent) = js.parent() {
                 if !path_dirs.contains(&parent.to_path_buf()) {
@@ -363,15 +390,51 @@ impl Engine for Ytdlp {
     }
 
     async fn resolve(&self, job: &Job, _ctx: &EngineCtx) -> Result<mdm_core::ResolveInfo> {
-        let out = tokio::process::Command::new(&self.bin)
-            .args([
-                "--no-config",
-                "--no-warnings",
-                "--flat-playlist",
-                "--dump-single-json",
-            ])
-            .arg(&job.url)
+        let mut cmd = tokio::process::Command::new(&self.bin);
+        #[cfg(windows)]
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        cmd.args([
+            "--no-config",
+            "--no-warnings",
+            "--no-check-certificates",
+            "--flat-playlist",
+            "--dump-single-json",
+        ]);
+
+        if job.url.contains("youtube.com") || job.url.contains("youtu.be") {
+            cmd.args(["--extractor-args", "youtube:player_client=default,web,android"]);
+        }
+
+        let mut path_dirs = Vec::new();
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(parent) = exe.parent() {
+                path_dirs.push(parent.join("bin"));
+                path_dirs.push(parent.join("resources").join("bin"));
+                path_dirs.push(parent.to_path_buf());
+            }
+        }
+        if let Some(parent) = self.bin.parent() {
+            path_dirs.push(parent.to_path_buf());
+        }
+        path_dirs.push(mdm_core::data_dir().join("bin"));
+        if let Some(ref js) = find_js_runtime() {
+            if let Some(parent) = js.parent() {
+                path_dirs.push(parent.to_path_buf());
+            }
+        }
+        if let Ok(cur_path) = std::env::var("PATH") {
+            path_dirs.extend(std::env::split_paths(&cur_path));
+        }
+        if let Ok(joined) = std::env::join_paths(&path_dirs) {
+            cmd.env("PATH", joined);
+        }
+
+        cmd.arg(&job.url)
             .env("NO_COLOR", "1")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        let out = cmd
             .output()
             .await
             .map_err(|e| Error::Engine(format!("spawn yt-dlp: {e}")))?;
@@ -396,7 +459,31 @@ impl Engine for Ytdlp {
 
     async fn run(&self, job: Job, ctx: EngineCtx) -> std::result::Result<JobDone, JobError> {
         let offload = self.with_aria2 && ctx.cfg.aria2_offload;
-        let result = self.run_once(&job, &ctx, offload, ctx.cfg.embed_thumbnail).await;
+        let mut result = self.run_once(&job, &ctx, offload, ctx.cfg.embed_thumbnail).await;
+
+        // If browser cookie extraction failed (e.g. Chrome cookie database locked or App-Bound encryption),
+        // retry immediately without browser cookies so the download proceeds normally.
+        if let Err(ref e) = result {
+            let msg = match e {
+                JobError::Retry(m) | JobError::Fatal(m) => m.as_str(),
+                JobError::Cancelled => "",
+            };
+            let lower = msg.to_lowercase();
+            if lower.contains("cookie database")
+                || lower.contains("could not copy")
+                || lower.contains("could not extract cookies")
+                || lower.contains("cookies-from-browser")
+            {
+                warn!(
+                    "job {}: browser cookie extraction failed — retrying cleanly without browser cookies",
+                    job.short_id()
+                );
+                let mut fallback_ctx = ctx.clone();
+                fallback_ctx.cfg.ytdlp_cookies_from_browser = String::new();
+                result = self.run_once(&job, &fallback_ctx, offload, ctx.cfg.embed_thumbnail).await;
+            }
+        }
+
         match result {
             // Postprocessing / thumbnail error -> retry cleanly without thumbnail embedding
             Err(JobError::Retry(ref msg)) | Err(JobError::Fatal(ref msg))
@@ -406,16 +493,20 @@ impl Engine for Ytdlp {
                     "job {}: thumbnail postprocessing failed — retrying cleanly without thumbnail embedding",
                     job.short_id()
                 );
-                self.run_once(&job, &ctx, false, false).await
+                let mut fallback_ctx = ctx.clone();
+                fallback_ctx.cfg.ytdlp_cookies_from_browser = String::new();
+                self.run_once(&job, &fallback_ctx, false, false).await
             }
             // aria2 offload failed -> let yt-dlp download natively so the
-            // job still completes on networks that block aria2's path.
-            Err(e) if offload && ctx.cfg.aria2_fallback => {
+            // job still completes on networks that block aria2's path (or return 403).
+            Err(e) if offload && ctx.cfg.aria2_fallback && !matches!(e, JobError::Cancelled) => {
                 warn!(
                     "job {}: aria2 offload failed ({e:?}) — retrying with yt-dlp's native downloader",
                     job.short_id()
                 );
-                self.run_once(&job, &ctx, false, ctx.cfg.embed_thumbnail).await
+                let mut fallback_ctx = ctx.clone();
+                fallback_ctx.cfg.ytdlp_cookies_from_browser = String::new();
+                self.run_once(&job, &fallback_ctx, false, ctx.cfg.embed_thumbnail).await
             }
             // Format unavailable error -> retry with universal best selector
             Err(JobError::Retry(ref msg)) | Err(JobError::Fatal(ref msg))
@@ -430,13 +521,12 @@ impl Engine for Ytdlp {
                 fallback_job.format = "bv*+ba/b[acodec!=none]/best".into();
                 let mut fallback_ctx = ctx.clone();
                 fallback_ctx.cfg.ytdlp_max_height = 0;
+                fallback_ctx.cfg.ytdlp_cookies_from_browser = String::new();
                 self.run_once(&fallback_job, &fallback_ctx, false, ctx.cfg.embed_thumbnail).await
             }
             other => other,
         }
     }
-
-
 
     async fn remove(&self, job: &Job) {
         let pid = self.children.lock().unwrap().remove(&job.id);
@@ -451,9 +541,12 @@ fn build_args(job: &Job, offload: bool, cfg: &Config, embed_thumbnail: bool) -> 
     let mut args: Vec<String> = vec![
         "--no-config".into(),
         "--no-warnings".into(),
+        "--no-check-certificates".into(),
         "--newline".into(),
         "--progress".into(),
         "--continue".into(),
+        "--extractor-retries".into(),
+        "3".into(),
         "--print".into(),
         "after_move:filepath".into(),
         // Early title line for the queue card (parsed as mdm_title:).
@@ -467,6 +560,14 @@ fn build_args(job: &Job, offload: bool, cfg: &Config, embed_thumbnail: bool) -> 
         "-o".into(),
         "%(title).100B [%(id).30B].%(ext)s".into(),
     ];
+
+    // YouTube challenge & anti-blocking options
+    if job.url.contains("youtube.com") || job.url.contains("youtu.be") {
+        args.extend([
+            "--extractor-args".into(),
+            "youtube:player_client=default,web,android".into(),
+        ]);
+    }
 
     // App-level network settings (settings page): cap + proxy.
     if let Some(limit) = cfg.speed_limit.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
@@ -513,7 +614,7 @@ fn build_args(job: &Job, offload: bool, cfg: &Config, embed_thumbnail: bool) -> 
     if offload {
         let timeout = cfg.aria2_connect_timeout.clamp(5, 300);
         let mut dl_args = format!(
-            "-x {} -s {} --connect-timeout {} --timeout {} --max-tries {} --retry-wait {} --summary-interval=1 --console-log-level=warn",
+            "-x {} -s {} --connect-timeout {} --timeout {} --max-tries {} --retry-wait {} --summary-interval=1 --console-log-level=warn --use-head=false",
             cfg.aria2_connections.clamp(1, 16).max(1),
             cfg.aria2_splits.clamp(1, 16).max(1),
             timeout,

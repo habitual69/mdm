@@ -1536,7 +1536,7 @@ async function loadSettings() {
     $("set-aria2-tracker").value = cfg.aria2_custom_tracker_url || "";
     $("set-ytdlp-quality").value = String(cfg.ytdlp_max_height ?? 0);
     $("set-ytdlp-merge").value = cfg.ytdlp_merge_format || "mkv";
-    if ($("set-ytdlp-cookies")) $("set-ytdlp-cookies").value = cfg.ytdlp_cookies_from_browser ?? "chrome";
+    if ($("set-ytdlp-cookies")) $("set-ytdlp-cookies").value = cfg.ytdlp_cookies_from_browser ?? "";
     $("set-ytdlp-audio").value = cfg.ytdlp_audio_format || "mp3";
     $("set-ytdlp-frags").value = cfg.ytdlp_fragments ?? 4;
     $("set-ytdlp-embed-subs").checked = !!cfg.ytdlp_embed_subs;
@@ -1547,6 +1547,8 @@ async function loadSettings() {
       $("set-notification-sound").checked = cfg.notification_sound !== false;
     }
     applyAppearance(cfg.theme, cfg.accent_color, cfg.widget_shape);
+    loadBinsStatus();
+    loadExtensionStatus();
     const dirty = $("settings-dirty");
     if (dirty) dirty.classList.add("hidden");
   } catch (e) {
@@ -1592,7 +1594,7 @@ $("settings-form").addEventListener("submit", async (e) => {
     aria2_custom_tracker_url: $("set-aria2-tracker").value.trim() || null,
     ytdlp_max_height: Number($("set-ytdlp-quality").value) || 0,
     ytdlp_merge_format: $("set-ytdlp-merge").value,
-    ytdlp_cookies_from_browser: $("set-ytdlp-cookies")?.value ?? "chrome",
+    ytdlp_cookies_from_browser: $("set-ytdlp-cookies")?.value ?? "",
     ytdlp_audio_format: $("set-ytdlp-audio").value,
     ytdlp_fragments: Number($("set-ytdlp-frags").value) || undefined,
     ytdlp_embed_subs: $("set-ytdlp-embed-subs").checked,
@@ -1833,6 +1835,243 @@ document.querySelectorAll("#widget-shape-chips .shape-chip").forEach((btn) => {
   });
 });
 
+// ---------- engine binary updates ----------
+
+async function loadBinsStatus() {
+  try {
+    const res = await fetch("/api/bins/status");
+    if (!res.ok) return;
+    const bins = await res.json();
+    for (const b of bins) {
+      if (b.name === "aria2c") {
+        const verEl = $("aria2-version-text");
+        if (verEl) {
+          verEl.textContent = b.version || "Installed";
+        }
+      } else if (b.name === "yt-dlp") {
+        const verEl = $("ytdlp-version-text");
+        if (verEl) {
+          verEl.textContent = b.version || "Installed";
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("cannot load bins status:", err);
+  }
+}
+
+async function triggerBinUpdate(name, btnId, statusId, verId) {
+  const btn = $(btnId);
+  const status = $(statusId);
+  const ver = $(verId);
+  if (!btn) return;
+
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = "Updating...";
+  if (status) {
+    status.style.color = "var(--muted)";
+    status.textContent = `Checking GitHub for ${name} updates...`;
+  }
+
+  try {
+    const res = await fetch("/api/bins/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      if (status) {
+        status.style.color = "var(--accent)";
+        status.textContent = data.message || `Successfully updated ${name}!`;
+      }
+      if (ver && data.version) {
+        ver.textContent = data.version;
+      }
+      notice(data.message || `${name} updated successfully!`);
+    } else {
+      if (status) {
+        status.style.color = "#ef4444";
+        status.textContent = data.message || `Update failed. Existing binary preserved.`;
+      }
+      notice(data.message || `Failed to update ${name}`, true);
+    }
+  } catch (err) {
+    if (status) {
+      status.style.color = "#ef4444";
+      status.textContent = `Network error: ${err.message}. Offline binary preserved.`;
+    }
+    notice(`Network error updating ${name}: ${err.message}`, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+
+$("btn-update-aria2")?.addEventListener("click", () => {
+  triggerBinUpdate("aria2c", "btn-update-aria2", "aria2-update-status", "aria2-version-text");
+});
+
+$("btn-update-ytdlp")?.addEventListener("click", () => {
+  triggerBinUpdate("yt-dlp", "btn-update-ytdlp", "ytdlp-update-status", "ytdlp-version-text");
+});
+
+// ---------- browser extension management ----------
+
+const BROWSER_ICONS = {
+  chrome: `<svg viewBox="0 0 24 24" class="ext-browser-ico"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><line x1="21.17" y1="8" x2="12" y2="8" stroke="currentColor" stroke-width="1.8"/><line x1="3.95" y1="6.06" x2="8.54" y2="14" stroke="currentColor" stroke-width="1.8"/><line x1="10.88" y1="21.94" x2="15.46" y2="14" stroke="currentColor" stroke-width="1.8"/></svg>`,
+  edge: `<svg viewBox="0 0 24 24" class="ext-browser-ico"><path d="M12 2a10 10 0 0 0-9.8 12c.5 2.1 2 4.1 4.2 4.9 3.5 1.4 7.6-.3 9.4-3.5a5.5 5.5 0 0 0-4.8-8.4c-2.4 0-4.5 1.5-5.3 3.7.8-1.5 2.4-2.4 4.1-2.4 2.8 0 5 2.2 5 5 0 2.2-1.8 4-4 4-2.5 0-4.4-1.8-4.8-4.2C6 11 8.2 7 12 7c4.4 0 8 3.6 8 8 0 1.2-.3 2.3-.8 3.3A10 10 0 0 0 12 2Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>`,
+  brave: `<svg viewBox="0 0 24 24" class="ext-browser-ico"><path d="M12 2 4 5v6c0 5.55 3.84 10.74 8 12 4.16-1.26 8-6.45 8-12V5l-8-3Zm0 4a4 4 0 0 1 4 4c0 2.5-2 3.5-4 5.5-2-2-4-3-4-5.5a4 4 0 0 1 4-4Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>`,
+  opera: `<svg viewBox="0 0 24 24" class="ext-browser-ico"><ellipse cx="12" cy="12" rx="9" ry="10" fill="none" stroke="currentColor" stroke-width="1.8"/><ellipse cx="12" cy="12" rx="4.5" ry="7.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>`,
+  vivaldi: `<svg viewBox="0 0 24 24" class="ext-browser-ico"><rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m8 8 4 8 4-8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  firefox: `<svg viewBox="0 0 24 24" class="ext-browser-ico"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2a10 10 0 0 1 10 10c0 4.5-3 8-7 9 2-2 3-5 1-7-1-1-3-1-4-2 0-2 1-3 2-4-2 .5-3.5 2-4 4-.5 2 0 4-1 5-1.5-1.5-2.5-3.5-2.5-6a8 8 0 0 1 8-8Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>`,
+};
+
+async function loadExtensionStatus() {
+  try {
+    const res = await fetch("/api/extension/status");
+    if (!res.ok) return;
+    const data = await res.json();
+
+    const pathInput = $("ext-folder-path");
+    const badgeEl = $("ext-version-badge");
+    const gridEl = $("ext-browser-grid");
+
+    if (pathInput) {
+      pathInput.value = data.folder_path || "Extension folder not found";
+    }
+
+    if (badgeEl) {
+      if (data.folder_exists && data.manifest_exists) {
+        badgeEl.textContent = `v${data.version || "0.1.0"} (Bundled & Ready)`;
+        badgeEl.className = "ext-version-badge ready";
+      } else {
+        badgeEl.textContent = "Not Located";
+        badgeEl.className = "ext-version-badge missing";
+      }
+    }
+
+    if (gridEl && Array.isArray(data.browsers)) {
+      gridEl.innerHTML = "";
+      data.browsers.forEach((b) => {
+        const card = mk("div", `ext-browser-card ${b.installed ? "is-installed" : "not-installed"}`);
+        
+        const topRow = mk("div", "ext-card-top");
+        const icoWrap = mk("div", `ext-card-ico ${b.id}`);
+        icoWrap.innerHTML = BROWSER_ICONS[b.id] || BROWSER_ICONS.chrome;
+        topRow.appendChild(icoWrap);
+
+        const badge = mk("span", `ext-card-badge ${b.installed ? "detected" : "missing"}`);
+        badge.textContent = b.installed ? "Detected" : "Not Found";
+        topRow.appendChild(badge);
+        card.appendChild(topRow);
+
+        const title = mk("div", "ext-card-title");
+        title.textContent = b.name;
+        card.appendChild(title);
+
+        const desc = mk("div", "ext-card-url");
+        desc.textContent = b.extensions_url;
+        card.appendChild(desc);
+
+        const actRow = mk("div", "ext-card-action");
+        if (b.installed) {
+          const btn = mk("button", "ext-action-btn primary");
+          btn.type = "button";
+          btn.innerHTML = `<span>Install / Add</span><svg viewBox="0 0 24 24" class="ext-btn-ico"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6m4-3h6v6m-11 5L21 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+          btn.addEventListener("click", async () => {
+            btn.disabled = true;
+            try {
+              const resp = await fetch("/api/extension/open-browser", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ browser: b.id }),
+              });
+              if (resp.ok) {
+                showToast({
+                  type: "success",
+                  title: `${b.name} Opened`,
+                  message: `Launched ${b.name} to its extensions page and revealed the extension folder in Explorer. Follow the 4-step guide below!`,
+                  timeout: 7000
+                });
+              } else {
+                notice(`Could not launch ${b.name}: ${await resp.text()}`, true);
+              }
+            } catch (err) {
+              notice(`Launch failed: ${err.message}`, true);
+            } finally {
+              btn.disabled = false;
+            }
+          });
+          actRow.appendChild(btn);
+        } else {
+          const btn = mk("button", "ext-action-btn disabled");
+          btn.type = "button";
+          btn.disabled = true;
+          btn.textContent = "Not Installed";
+          actRow.appendChild(btn);
+        }
+        card.appendChild(actRow);
+        gridEl.appendChild(card);
+      });
+    }
+  } catch (err) {
+    console.warn("cannot load extension status:", err);
+  }
+}
+
+$("ext-copy-path-btn")?.addEventListener("click", async () => {
+  const path = $("ext-folder-path")?.value;
+  if (!path) return;
+  try {
+    await navigator.clipboard.writeText(path);
+    const btn = $("ext-copy-path-btn");
+    const label = btn.querySelector(".ext-btn-label");
+    const ico = btn.querySelector(".ext-btn-ico");
+
+    btn.classList.add("copied");
+    if (label) label.textContent = "Copied!";
+    if (ico) {
+      ico.innerHTML = `<path d="M20 6 9 17l-5-5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+    }
+    showToast({
+      type: "info",
+      title: "Path Copied",
+      message: "Extension folder path copied to clipboard",
+      timeout: 3000
+    });
+    setTimeout(() => {
+      btn.classList.remove("copied");
+      if (label) label.textContent = "Copy Path";
+      if (ico) {
+        ico.innerHTML = `<rect x="9" y="9" width="13" height="13" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+      }
+    }, 2000);
+  } catch (e) {
+    notice(`Cannot copy path: ${e}`, true);
+  }
+});
+
+$("ext-open-folder-btn")?.addEventListener("click", async () => {
+  try {
+    const res = await fetch("/api/extension/open-folder", { method: "POST" });
+    if (res.ok) {
+      showToast({
+        type: "info",
+        title: "Folder Opened",
+        message: "Extension folder revealed in Windows Explorer",
+        timeout: 4000
+      });
+    } else {
+      notice(`Failed to open folder: ${await res.text()}`, true);
+    }
+  } catch (e) {
+    notice(`Failed to open folder: ${e.message}`, true);
+  }
+});
+
+
 // ---------- router ----------
 
 function applyRoute() {
@@ -1854,12 +2093,17 @@ function applyRoute() {
     }
   } else if (view === "settings") {
     target = "#/settings";
+  } else if (view === "about") {
+    target = "#/about";
   } else {
     view = "home";
   }
 
-  const views = { home: "view-home", downloads: "view-downloads", settings: "view-settings" };
-  for (const [v, id] of Object.entries(views)) $(id).hidden = v !== view;
+  const views = { home: "view-home", downloads: "view-downloads", settings: "view-settings", about: "view-about" };
+  for (const [v, id] of Object.entries(views)) {
+    const el = $(id);
+    if (el) el.hidden = v !== view;
+  }
 
   for (const btn of document.querySelectorAll("[data-nav], [data-kind]")) {
     const dest = btn.dataset.kind || btn.dataset.nav;
@@ -2300,6 +2544,19 @@ $("tb-min")?.addEventListener("click", () => triggerWindowAction("minimize"));
 $("tb-max")?.addEventListener("click", () => triggerWindowAction("maximize"));
 $("tb-close")?.addEventListener("click", () => triggerWindowAction("close"));
 $("tb-widget-btn")?.addEventListener("click", () => triggerWindowAction("toggle-floating"));
+
+document.addEventListener("click", (e) => {
+  const link = e.target.closest('a[href^="http"]');
+  if (link && (link.target === "_blank" || link.classList.contains("about-link-row"))) {
+    if (window.__TAURI__?.shell?.open) {
+      e.preventDefault();
+      window.__TAURI__.shell.open(link.href);
+    } else if (window.__TAURI__?.opener?.openUrl) {
+      e.preventDefault();
+      window.__TAURI__.opener.openUrl(link.href);
+    }
+  }
+});
 
 $("titlebar")?.addEventListener("dblclick", (e) => {
   if (!e.target.closest(".tb-btn") && !e.target.closest(".tb-transfer-btn")) {
