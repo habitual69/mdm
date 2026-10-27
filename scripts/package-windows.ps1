@@ -153,6 +153,35 @@ if ((-not (Test-Path $YtDlp)) -or (-not (Test-Path $Aria))) {
     }
 }
 
+# Direct fallback if yt-dlp or aria2c are still missing
+if (-not (Test-Path $YtDlp)) {
+    try {
+        Write-Host "  -> Downloading yt-dlp.exe directly..." -ForegroundColor Cyan
+        Invoke-WebRequest -Uri "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" -OutFile $YtDlp -TimeoutSec 60
+        Write-Host "  -> Successfully fetched yt-dlp.exe" -ForegroundColor Green
+    } catch {
+        Write-Host "  -> Note: yt-dlp direct download skipped ($($_.Exception.Message))" -ForegroundColor Yellow
+    }
+}
+if (-not (Test-Path $Aria)) {
+    try {
+        Write-Host "  -> Downloading aria2c.exe directly..." -ForegroundColor Cyan
+        $AriaZip = Join-Path $DistDir "aria2_temp.zip"
+        Invoke-WebRequest -Uri "https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0-win-64bit-build1.zip" -OutFile $AriaZip -TimeoutSec 60
+        $AriaDir = Join-Path $DistDir "aria2_ext"
+        Expand-Archive -Path $AriaZip -DestinationPath $AriaDir -Force
+        $FoundExe = Get-ChildItem -Path $AriaDir -Filter "aria2c.exe" -Recurse | Select-Object -First 1
+        if ($FoundExe) {
+            Copy-Item -Path $FoundExe.FullName -Destination $Aria -Force
+            Write-Host "  -> Successfully fetched aria2c.exe" -ForegroundColor Green
+        }
+        Remove-Item -Recurse -Force $AriaDir -ErrorAction SilentlyContinue
+        Remove-Item -Force $AriaZip -ErrorAction SilentlyContinue
+    } catch {
+        Write-Host "  -> Note: aria2c direct download skipped ($($_.Exception.Message))" -ForegroundColor Yellow
+    }
+}
+
 # Copy application icon
 $AppIcon = Join-Path $RootDir "mdm-app\src-tauri\icons\icon.ico"
 if (Test-Path $AppIcon) {

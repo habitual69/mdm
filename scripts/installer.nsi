@@ -134,8 +134,8 @@ Section "MainSection" SEC01
 
     ; 2. Bundled dependencies
     SetOutPath "$INSTDIR\bin"
-    File "..\dist\package\bin\yt-dlp.exe"
-    File "..\dist\package\bin\aria2c.exe"
+    File /nonfatal "..\dist\package\bin\yt-dlp.exe"
+    File /nonfatal "..\dist\package\bin\aria2c.exe"
     File /nonfatal "..\dist\package\bin\mdm.exe"
     File /nonfatal "..\dist\package\bin\ffmpeg.exe"
     File /nonfatal "..\dist\package\bin\ffprobe.exe"
