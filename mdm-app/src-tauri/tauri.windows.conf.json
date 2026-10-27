@@ -1,0 +1,9 @@
+{
+  "bundle": {
+    "targets": ["nsis"],
+    "resources": {
+      "bin/*": "bin/",
+      "WebView2Loader.dll": "."
+    }
+  }
+}

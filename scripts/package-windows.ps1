@@ -60,14 +60,45 @@ foreach ($bin in $RequiredBinaries) {
 
 # Copy root WebView2Loader.dll (must sit next to the main executable for runtime dynamic loading)
 $RootDll = Join-Path $RootDir "mdm-app\src-tauri\WebView2Loader.dll"
+$StagedDll = $false
 if (Test-Path $RootDll) {
     Copy-Item -Path $RootDll -Destination $PackageDir -Force
+    Copy-Item -Path $RootDll -Destination $PackageBinDir -Force
     Write-Host "  -> Staged root WebView2Loader.dll" -ForegroundColor Green
+    $StagedDll = $true
 } else {
     $BinDll = Join-Path $TauriBinDir "WebView2Loader.dll"
     if (Test-Path $BinDll) {
         Copy-Item -Path $BinDll -Destination $PackageDir -Force
+        Copy-Item -Path $BinDll -Destination $PackageBinDir -Force
         Write-Host "  -> Staged root WebView2Loader.dll from bin directory" -ForegroundColor Green
+        $StagedDll = $true
+    }
+}
+
+# If WebView2Loader.dll is still not staged, locate it from webview2-com-sys build directory
+if (-not $StagedDll) {
+    $SysDll = Get-ChildItem -Path (Join-Path $RootDir "target") -Filter "WebView2Loader.dll" -Recurse -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -match "x64" } |
+        Select-Object -First 1
+    if ($SysDll -and (Test-Path $SysDll.FullName)) {
+        Copy-Item -Path $SysDll.FullName -Destination $PackageDir -Force
+        Copy-Item -Path $SysDll.FullName -Destination $PackageBinDir -Force
+        Copy-Item -Path $SysDll.FullName -Destination $RootDll -Force
+        Write-Host "  -> Staged WebView2Loader.dll from build cache: $($SysDll.FullName)" -ForegroundColor Green
+        $StagedDll = $true
+    }
+}
+
+# If MicrosoftEdgeWebview2Setup.exe is missing, download evergreen bootstrapper
+$WvSetup = Join-Path $PackageBinDir "MicrosoftEdgeWebview2Setup.exe"
+if (-not (Test-Path $WvSetup)) {
+    try {
+        Write-Host "  -> Downloading MicrosoftEdgeWebview2Setup.exe bootstrapper..." -ForegroundColor Cyan
+        Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -OutFile $WvSetup -TimeoutSec 30
+        Write-Host "  -> Successfully downloaded WebView2 bootstrapper" -ForegroundColor Green
+    } catch {
+        Write-Host "  -> Note: Could not download WebView2 bootstrapper ($($_.Exception.Message))." -ForegroundColor Yellow
     }
 }
 
@@ -91,6 +122,35 @@ if (Test-Path $ReleaseAppExe) {
 if (Test-Path $ReleaseCliExe) {
     Copy-Item -Path $ReleaseCliExe -Destination (Join-Path $PackageBinDir "mdm.exe") -Force
     Write-Host "  -> Copied CLI binary into package bin: mdm.exe" -ForegroundColor Green
+}
+
+# If yt-dlp or aria2c are missing, run mdm setup to fetch and bundle them
+$YtDlp = Join-Path $PackageBinDir "yt-dlp.exe"
+$Aria = Join-Path $PackageBinDir "aria2c.exe"
+if ((-not (Test-Path $YtDlp)) -or (-not (Test-Path $Aria))) {
+    $CliInPackage = Join-Path $PackageBinDir "mdm.exe"
+    if (Test-Path $CliInPackage) {
+        Write-Host "  -> Auto-populating engine dependencies with mdm setup..." -ForegroundColor Cyan
+        try {
+            & $CliInPackage setup
+            $DataBinDirs = @(
+                (Join-Path $env:APPDATA "mdm\bin"),
+                (Join-Path $env:LOCALAPPDATA "mdm\bin")
+            )
+            foreach ($db in $DataBinDirs) {
+                if (Test-Path $db) {
+                    Get-ChildItem -Path $db -Filter "*.exe" | ForEach-Object {
+                        if (-not (Test-Path (Join-Path $PackageBinDir $_.Name))) {
+                            Copy-Item -Path $_.FullName -Destination $PackageBinDir -Force
+                            Write-Host "  -> Staged from setup: $($_.Name)" -ForegroundColor Green
+                        }
+                    }
+                }
+            }
+        } catch {
+            Write-Host "  -> Note: mdm setup failed: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    }
 }
 
 # Copy application icon
