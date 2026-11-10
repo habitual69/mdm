@@ -772,3 +772,149 @@ document.addEventListener(
   },
   true
 );
+
+// --- In-page Download Dialog (fixed-size modal) -----------------------------
+// Chrome cannot make extension popup windows non-resizable, so the dialog is
+// mounted inside a closed Shadow DOM in the page. It is fixed size and cannot
+// be resized. Restricted pages (chrome://, Web Store) fall back to the popup.
+
+let dialogHost = null;
+let dialogUi = null;
+let dialogRequestId = 0;
+let dialogAssetsPromise = null;
+let savedHtmlOverflow = null;
+let savedBodyOverflow = null;
+let lastFocusedElement = null;
+
+function loadDialogCss() {
+  if (!dialogAssetsPromise) {
+    dialogAssetsPromise = new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage({ action: "GET_DIALOG_CSS" }, (res) => {
+          if (chrome.runtime.lastError || !res || !res.ok) {
+            dialogAssetsPromise = null;
+            resolve(null);
+            return;
+          }
+          resolve(res);
+        });
+      } catch (_) {
+        dialogAssetsPromise = null;
+        resolve(null);
+      }
+    });
+  }
+  return dialogAssetsPromise;
+}
+
+function lockPageScroll() {
+  savedHtmlOverflow = document.documentElement.style.overflow;
+  savedBodyOverflow = document.body ? document.body.style.overflow : "";
+  document.documentElement.style.overflow = "hidden";
+  if (document.body) document.body.style.overflow = "hidden";
+}
+
+function unlockPageScroll() {
+  if (savedHtmlOverflow === null) return;
+  document.documentElement.style.overflow = savedHtmlOverflow;
+  if (document.body) document.body.style.overflow = savedBodyOverflow || "";
+  savedHtmlOverflow = null;
+}
+
+function closeDownloadDialog() {
+  if (dialogUi) {
+    try { dialogUi.destroy(); } catch (_) {}
+    dialogUi = null;
+  }
+  if (dialogHost) {
+    dialogHost.remove();
+    dialogHost = null;
+  }
+  unlockPageScroll();
+  if (lastFocusedElement && lastFocusedElement.isConnected &&
+      typeof lastFocusedElement.focus === "function") {
+    try { lastFocusedElement.focus({ preventScroll: true }); } catch (_) {}
+  }
+  lastFocusedElement = null;
+}
+
+async function showDownloadDialog(payload) {
+  if (window.top !== window) return { ok: false };
+  const requestId = ++dialogRequestId;
+  closeDownloadDialog();
+
+  const assets = await loadDialogCss();
+  if (requestId !== dialogRequestId) return { ok: true };
+  if (!assets) return { ok: false };
+
+  let panel;
+  try {
+    if (!window.MdmDialogCore) return { ok: false };
+    panel = window.MdmDialogCore.build(document);
+  } catch (_) {
+    return { ok: false };
+  }
+
+  lastFocusedElement = document.activeElement;
+
+  const host = document.createElement("div");
+  host.id = "mdm-download-dialog-host";
+  host.setAttribute("style", "all:initial !important;position:fixed !important;inset:0 !important;z-index:2147483647 !important;display:block !important;");
+  const shadow = host.attachShadow({ mode: "closed" });
+
+  try {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(assets.css);
+    shadow.adoptedStyleSheets = [sheet];
+  } catch (_) {
+    const style = document.createElement("style");
+    style.textContent = assets.css;
+    shadow.appendChild(style);
+  }
+
+  const overlay = document.createElement("div");
+  overlay.className = "mdm-modal-overlay";
+  overlay.addEventListener("wheel", (e) => {
+    const body = e.target && typeof e.target.closest === "function"
+      ? e.target.closest(".dlg-body")
+      : null;
+    if (body && body.scrollHeight > body.clientHeight) return;
+    e.preventDefault();
+  }, { passive: false });
+
+  panel.setAttribute("role", "dialog");
+  panel.setAttribute("aria-modal", "true");
+  panel.setAttribute("aria-label", "Download File Info");
+  panel.setAttribute("tabindex", "-1");
+
+  overlay.appendChild(panel);
+  shadow.appendChild(overlay);
+  document.documentElement.appendChild(host);
+
+  lockPageScroll();
+
+  dialogHost = host;
+  dialogUi = window.MdmDialogCore.create({
+    root: shadow,
+    params: payload,
+    onClose: closeDownloadDialog,
+  });
+
+  try { panel.focus({ preventScroll: true }); } catch (_) {}
+
+  return { ok: true };
+}
+
+if (window.top === window) {
+  chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
+    if (!req || req.action !== "SHOW_DOWNLOAD_DIALOG") return false;
+    showDownloadDialog(req.payload || {})
+      .then(sendResponse)
+      .catch((err) => {
+        console.warn("[mDm] In-page dialog failed:", err);
+        closeDownloadDialog();
+        sendResponse({ ok: false });
+      });
+    return true;
+  });
+}

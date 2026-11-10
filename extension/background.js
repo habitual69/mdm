@@ -61,9 +61,56 @@ function extractExtension(url, filename) {
   return m ? m[1].toLowerCase() : "";
 }
 
-function openDownloadDialog({ url, filename, size, kind, format, referrer, windowId }) {
+function openDownloadDialog({ url, filename, size, kind, format, referrer, windowId, tabId }) {
+  const payload = {
+    url: url || "",
+    filename: filename || "",
+    size: size || 0,
+    kind: kind || "",
+    format: format || "",
+    referrer: referrer || "",
+  };
+
+  const openPopup = () => openDialogWindow(payload, windowId);
+
+  const tryTab = (id) => {
+    if (id == null) {
+      openPopup();
+      return;
+    }
+    try {
+      chrome.tabs.sendMessage(
+        id,
+        { action: "SHOW_DOWNLOAD_DIALOG", payload },
+        { frameId: 0 },
+        (res) => {
+          if (chrome.runtime.lastError || !res || !res.ok) openPopup();
+        }
+      );
+    } catch (_) {
+      openPopup();
+    }
+  };
+
+  if (tabId != null) {
+    tryTab(tabId);
+    return;
+  }
+
+  // Browser-level download interception has no tab id. Show the dialog in the
+  // tab the user is looking at; restricted pages fall back to the popup window.
+  chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+    if (chrome.runtime.lastError || !tabs || !tabs.length) {
+      openPopup();
+      return;
+    }
+    tryTab(tabs[0].id);
+  });
+}
+
+function openDialogWindow(payload, windowId) {
   const dialogUrl = chrome.runtime.getURL(
-    `dialog.html?url=${encodeURIComponent(url || "")}&filename=${encodeURIComponent(filename || "")}&size=${encodeURIComponent(size || 0)}&kind=${encodeURIComponent(kind || "")}&format=${encodeURIComponent(format || "")}&referrer=${encodeURIComponent(referrer || "")}`
+    `dialog.html?url=${encodeURIComponent(payload.url || "")}&filename=${encodeURIComponent(payload.filename || "")}&size=${encodeURIComponent(payload.size || 0)}&kind=${encodeURIComponent(payload.kind || "")}&format=${encodeURIComponent(payload.format || "")}&referrer=${encodeURIComponent(payload.referrer || "")}`
   );
 
   const w = 580;
@@ -122,6 +169,20 @@ function openDownloadDialog({ url, filename, size, kind, format, referrer, windo
   } else {
     chrome.tabs.create({ url: dialogUrl });
   }
+}
+
+// CSS for the in-page modal, loaded once and reused per tab.
+let dialogCssCache = null;
+function getDialogCss() {
+  if (dialogCssCache) return dialogCssCache;
+  dialogCssCache = fetch(chrome.runtime.getURL("dialog.css"))
+    .then((r) => r.text())
+    .then((css) => ({ ok: true, css }))
+    .catch((err) => {
+      dialogCssCache = null;
+      return { ok: false, error: String(err) };
+    });
+  return dialogCssCache;
 }
 
 // Intercept browser downloads when filename and mime are determined
@@ -265,6 +326,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       kind,
       referrer: tab?.url || "",
       windowId: tab?.windowId,
+      tabId: tab?.id,
     });
   } else {
     const res = await sendDownloadToMdm({ url, title: filename, kind });
@@ -527,6 +589,7 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
       format,
       referrer: referrer || sender.tab?.url || "",
       windowId: sender.tab?.windowId,
+      tabId: sender.tab?.id,
     });
     sendResponse({ ok: true });
     return false;
@@ -540,6 +603,7 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
         size: 0,
         referrer: sender.tab?.url || "",
         windowId: sender.tab?.windowId,
+        tabId: sender.tab?.id,
       });
     } else {
       sendDownloadToMdm({ url, title: filename || title, kind: "direct" }).then((res) => {
@@ -559,6 +623,17 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
   }
   if (req.action === "CHECK_STATUS") {
     checkMdmHealth().then(sendResponse);
+    return true;
+  }
+  if (req.action === "GET_CONFIG") {
+    fetch(`${MDM_API_BASE}/api/config`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((config) => sendResponse({ ok: !!config, config }))
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
+  if (req.action === "GET_DIALOG_CSS") {
+    getDialogCss().then(sendResponse);
     return true;
   }
   if (req.action === "GET_MEDIA_INFO") {
