@@ -257,6 +257,11 @@ theme = "dark"                      # "dark" | "light" | "system"
 accent_color = "#e8934a"            # Primary accent color (Hex)
 widget_shape = "pill"               # "pill" | "card" | "minimalistic"
 
+# Desktop App
+autostart = false                   # Launch at login (Linux & Windows, starts in tray)
+notifications_enabled = true        # Native OS notifications on finish/failure
+notification_sound = true           # Chime for finished/failed downloads
+
 # aria2 Multi-Connection Tuning
 aria2_connections = 8               # Connections per server (1-16)
 aria2_splits = 8                    # Split file into N chunks

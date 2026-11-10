@@ -385,7 +385,7 @@
               <h2>Settings</h2>
               <span id="settings-dirty" class="badge-dirty hidden">Unsaved changes</span>
             </div>
-            <p class="settings-sub">Defaults for new downloads. Stored in <code>~/.local/share/mdm/config.toml</code></p>
+            <p class="settings-sub">App preferences and defaults for new downloads. Stored in <code>~/.local/share/mdm/config.toml</code></p>
           </div>
           <div class="settings-actions">
             <span id="settings-saved" class="saved-hint hidden">Saved &#10003;</span>
@@ -561,13 +561,13 @@
               </div>
             </div>
           </div>
-          <!-- Card 1: Storage & Queue -->
+          <!-- Card 1: General (storage, startup, notifications) -->
           <div class="settings-card" data-category="general">
             <div class="card-head">
               <svg viewBox="0 0 24 24" class="card-ico"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
               <div class="card-title-wrap">
-                <h3>Storage &amp; Queue</h3>
-                <span class="card-desc">Save location and concurrent job limits</span>
+                <h3>General</h3>
+                <span class="card-desc">Storage, startup, queue limits, and notifications</span>
               </div>
             </div>
 
@@ -600,6 +600,14 @@
             </div>
 
             <div class="toggle-list" style="margin-top: 14px;">
+              <label class="toggle-row">
+                <div class="toggle-meta">
+                  <span class="toggle-title">Launch at login</span>
+                  <small class="field-note">Start mDm automatically when you sign in and keep it in the tray (Linux &amp; Windows).</small>
+                </div>
+                <input type="checkbox" id="set-autostart" class="toggle-input">
+                <span class="toggle-slider"></span>
+              </label>
               <label class="toggle-row">
                 <div class="toggle-meta">
                   <span class="toggle-title">Desktop system notifications</span>

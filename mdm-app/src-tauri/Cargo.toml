@@ -14,4 +14,8 @@ mdm-server = { workspace = true }
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+dirs.workspace = true
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.56"

@@ -103,6 +103,8 @@ pub struct Config {
     pub notifications_enabled: bool,
     /// Notification sound chime enabled.
     pub notification_sound: bool,
+    /// Launch mDm automatically at login (Linux autostart entry / Windows Run key).
+    pub autostart: bool,
 }
 
 impl Default for Config {
@@ -148,6 +150,7 @@ impl Default for Config {
             ytdlp_cookies_from_browser: String::new(),
             notifications_enabled: true,
             notification_sound: true,
+            autostart: false,
         }
     }
 }

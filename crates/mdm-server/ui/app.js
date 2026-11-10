@@ -1543,6 +1543,9 @@ async function loadSettings() {
     if ($("set-notifications-enabled")) {
       $("set-notifications-enabled").checked = cfg.notifications_enabled !== false;
     }
+    if ($("set-autostart")) {
+      $("set-autostart").checked = !!cfg.autostart;
+    }
     if ($("set-notification-sound")) {
       $("set-notification-sound").checked = cfg.notification_sound !== false;
     }
@@ -1603,6 +1606,7 @@ $("settings-form").addEventListener("submit", async (e) => {
     widget_shape: $("set-widget-shape")?.value || "pill",
     notifications_enabled: $("set-notifications-enabled") ? $("set-notifications-enabled").checked : true,
     notification_sound: $("set-notification-sound") ? $("set-notification-sound").checked : true,
+    autostart: $("set-autostart") ? $("set-autostart").checked : false,
   };
   try {
     const res = await fetch("/api/config", {

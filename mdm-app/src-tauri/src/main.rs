@@ -11,6 +11,104 @@ use tauri::{Manager, WebviewUrl};
 
 const ADDR: &str = "127.0.0.1:5757";
 
+/// Executable used in the login autostart entry. For AppImages, `current_exe`
+/// points at the temporary mount, so prefer the real AppImage file.
+fn launch_executable() -> std::path::PathBuf {
+    if let Some(appimage) = std::env::var_os("APPIMAGE") {
+        if !appimage.is_empty() {
+            return std::path::PathBuf::from(appimage);
+        }
+    }
+    std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("mdm"))
+}
+
+#[cfg(target_os = "linux")]
+fn linux_autostart_entry(exe: &std::path::Path) -> String {
+    let quoted = exe
+        .display()
+        .to_string()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('%', "%%");
+    format!(
+        "[Desktop Entry]\n\
+         Type=Application\n\
+         Name=mDm\n\
+         Comment=mDm Media Download Manager\n\
+         Exec=\"{quoted}\" --silent\n\
+         Icon=mdm\n\
+         Terminal=false\n\
+         Categories=Network;FileTransfer;\n\
+         X-GNOME-Autostart-enabled=true\n"
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn apply_autostart(enabled: bool) {
+    use std::fs;
+
+    let Some(config_dir) = dirs::config_dir() else {
+        eprintln!("mdm: cannot resolve config dir for autostart");
+        return;
+    };
+    let autostart_dir = config_dir.join("autostart");
+    let entry = autostart_dir.join("mdm.desktop");
+
+    if !enabled {
+        match fs::remove_file(&entry) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => eprintln!("mdm: failed to remove autostart entry: {e}"),
+        }
+        return;
+    }
+
+    if let Err(e) = fs::create_dir_all(&autostart_dir) {
+        eprintln!("mdm: failed to create autostart directory: {e}");
+        return;
+    }
+
+    let contents = linux_autostart_entry(&launch_executable());
+    if let Err(e) = fs::write(&entry, contents) {
+        eprintln!("mdm: failed to write autostart entry: {e}");
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn apply_autostart(enabled: bool) {
+    use winreg::RegKey;
+    use winreg::enums::HKEY_CURRENT_USER;
+
+    const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
+    const VALUE: &str = "mDm";
+
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let key = match hkcu.create_subkey(RUN_KEY) {
+        Ok((key, _)) => key,
+        Err(e) => {
+            eprintln!("mdm: cannot open autostart registry key: {e}");
+            return;
+        }
+    };
+
+    if enabled {
+        let exe = launch_executable();
+        let command = format!("\"{}\" --silent", exe.display());
+        if let Err(e) = key.set_value(VALUE, &command) {
+            eprintln!("mdm: failed to write autostart registry value: {e}");
+        }
+    } else {
+        match key.delete_value(VALUE) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => eprintln!("mdm: failed to remove autostart registry value: {e}"),
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
+fn apply_autostart(_enabled: bool) {}
+
 fn format_speed(bps: u64) -> String {
     if bps == 0 {
         return "0 B/s".into();
@@ -101,6 +199,13 @@ fn main() {
         .setup(|app| {
             let icon_bytes = include_bytes!("../icons/icon.png");
             let icon = Image::from_bytes(icon_bytes)?;
+
+            // Keep the OS login entry in sync with the saved preference. The
+            // entry launches mDm with --silent so it starts in the tray.
+            let launch_silent = std::env::args().any(|arg| arg == "--silent");
+            if let Ok(cfg) = mdm_core::load_config() {
+                apply_autostart(cfg.autostart);
+            }
 
             // Build system tray menu with live speed status
             let speed_item = MenuItem::with_id(app, "speed", "mDm: idle", false, None::<&str>)?;
@@ -209,6 +314,9 @@ fn main() {
                             if let Some(w) = handle_actions.get_webview_window("floating") {
                                 let _ = w.set_size(tauri::Size::Logical(tauri::LogicalSize { width, height }));
                             }
+                        }
+                        mdm_server::WindowAction::SetAutostart { enabled } => {
+                            apply_autostart(enabled);
                         }
                     }
                 }
@@ -320,6 +428,7 @@ fn main() {
             .min_inner_size(420.0, 480.0)
             .resizable(true)
             .center()
+            .visible(!launch_silent)
             .build()?;
 
             // Floating Speed Widget Window (always on top, frameless, compact speed pill & graph)
@@ -349,4 +458,23 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .expect("error while running mdm");
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::linux_autostart_entry;
+
+    #[test]
+    fn autostart_entry_quotes_exec_path() {
+        let entry = linux_autostart_entry(std::path::Path::new("/opt/My Apps/mdm"));
+        assert!(entry.contains("Exec=\"/opt/My Apps/mdm\" --silent"));
+        assert!(entry.contains("X-GNOME-Autostart-enabled=true"));
+        assert!(entry.contains("Type=Application"));
+    }
+
+    #[test]
+    fn autostart_entry_escapes_percent() {
+        let entry = linux_autostart_entry(std::path::Path::new("/opt/100%/mdm"));
+        assert!(entry.contains("Exec=\"/opt/100%%/mdm\" --silent"));
+    }
 }

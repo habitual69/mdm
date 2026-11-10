@@ -35,6 +35,7 @@ pub enum WindowAction {
     ToggleFloating,
     ResizeFloating { width: f64, height: f64 },
     Show,
+    SetAutostart { enabled: bool },
 }
 
 #[derive(Clone)]
@@ -869,6 +870,7 @@ struct ConfigUpdate {
     widget_shape: Option<String>,
     notifications_enabled: Option<bool>,
     notification_sound: Option<bool>,
+    autostart: Option<bool>,
 }
 
 async fn get_config(State(st): State<AppState>) -> Json<mdm_core::Config> {
@@ -1012,6 +1014,13 @@ async fn put_config(
     if let Some(v) = up.notification_sound {
         cfg.notification_sound = v;
     }
+    let autostart_changed = match up.autostart {
+        Some(v) => v != cfg.autostart,
+        None => false,
+    };
+    if let Some(v) = up.autostart {
+        cfg.autostart = v;
+    }
     if let Some(dir) = up.output_dir {
         if dir.as_os_str().is_empty() {
             return Err((StatusCode::BAD_REQUEST, "output_dir must not be empty".into()));
@@ -1022,6 +1031,11 @@ async fn put_config(
         cfg.output_dir = dir;
     }
     mdm_core::save_config(&cfg).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    if autostart_changed {
+        if let Some(tx) = &st.window_tx {
+            let _ = tx.send(WindowAction::SetAutostart { enabled: cfg.autostart });
+        }
+    }
     st.queue.replace_config(cfg.clone());
     st.queue.notify_engines(&cfg).await;
     Ok(Json(cfg))
