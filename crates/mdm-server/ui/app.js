@@ -1616,6 +1616,10 @@ $("settings-form").addEventListener("submit", async (e) => {
     });
     if (res.ok) {
       cfgCache = await res.json();
+      if ($("set-speed-limit")) $("set-speed-limit").value = cfgCache.speed_limit || "";
+      if ($("set-proxy")) $("set-proxy").value = cfgCache.proxy || "";
+      if ($("set-aria2-ua")) $("set-aria2-ua").value = cfgCache.aria2_user_agent || "";
+      if ($("set-aria2-tracker")) $("set-aria2-tracker").value = cfgCache.aria2_custom_tracker_url || "";
       applyAppearance(cfgCache.theme, cfgCache.accent_color, cfgCache.widget_shape);
       const btn = $("settings-save");
       const hint = $("settings-saved");

@@ -376,6 +376,12 @@ struct MediaFormat {
     resolution: String,
     filesize_approx: Option<u64>,
     note: String,
+    height: Option<i64>,
+    vcodec: String,
+    acodec: String,
+    abr: Option<f64>,
+    tbr: Option<f64>,
+    fps: Option<f64>,
 }
 
 #[derive(serde::Serialize)]
@@ -416,7 +422,7 @@ async fn media_info(
     let mut cmd = tokio::process::Command::new(ytdlp_path);
     #[cfg(windows)]
     cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-    cmd.args(["--dump-single-json", "--no-warnings", "--no-config", "--no-check-certificates", "--flat-playlist"]);
+    cmd.args(["--dump-single-json", "--no-warnings", "--no-config", "--no-check-certificates", "--no-playlist", "--flat-playlist"]);
 
     if url.contains("youtube.com") || url.contains("youtu.be") {
         cmd.args(["--extractor-args", "youtube:player_client=default,web,android"]);
@@ -497,6 +503,9 @@ async fn media_info(
             let height = f.get("height").and_then(|v| v.as_i64());
             let vcodec = f.get("vcodec").and_then(|v| v.as_str()).unwrap_or("");
             let acodec = f.get("acodec").and_then(|v| v.as_str()).unwrap_or("");
+            let abr = f.get("abr").and_then(|v| v.as_f64());
+            let tbr = f.get("tbr").and_then(|v| v.as_f64());
+            let fps = f.get("fps").and_then(|v| v.as_f64());
 
             let resolution = if let Some(h) = height {
                 format!("{h}p")
@@ -516,6 +525,12 @@ async fn media_info(
                 resolution,
                 filesize_approx: size,
                 note,
+                height,
+                vcodec: vcodec.to_string(),
+                acodec: acodec.to_string(),
+                abr,
+                tbr,
+                fps,
             });
         }
     }
@@ -834,13 +849,23 @@ async fn upload_torrent(
     Ok(Json(json!({ "path": path.to_string_lossy(), "name": file_name })))
 }
 
+fn deserialize_some<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    T: serde::Deserialize<'de>,
+    D: serde::Deserializer<'de>,
+{
+    T::deserialize(deserializer).map(Some)
+}
+
 #[derive(Debug, Clone, serde::Deserialize)]
 struct ConfigUpdate {
     max_concurrent: Option<u32>,
     output_dir: Option<std::path::PathBuf>,
     seed_minutes: Option<u32>,
     max_retries: Option<u32>,
+    #[serde(default, deserialize_with = "deserialize_some")]
     speed_limit: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_some")]
     proxy: Option<Option<String>>,
     write_subtitles: Option<bool>,
     write_auto_subs: Option<bool>,
@@ -858,7 +883,9 @@ struct ConfigUpdate {
     aria2_retry_wait: Option<u32>,
     aria2_lowest_speed_limit: Option<u32>,
     aria2_bt_max_peers: Option<u32>,
+    #[serde(default, deserialize_with = "deserialize_some")]
     aria2_user_agent: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_some")]
     aria2_custom_tracker_url: Option<Option<String>>,
     ytdlp_max_height: Option<u32>,
     ytdlp_merge_format: Option<String>,
@@ -1542,4 +1569,24 @@ async fn open_extension_folder() -> Result<Json<serde_json::Value>, (StatusCode,
 #[allow(dead_code)]
 fn _uses(s: JobState) -> &'static str {
     s.as_str()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ConfigUpdate;
+
+    #[test]
+    fn config_update_distinguishes_null_from_missing() {
+        let missing: ConfigUpdate = serde_json::from_str("{}").unwrap();
+        assert!(missing.speed_limit.is_none());
+        assert!(missing.proxy.is_none());
+
+        let cleared: ConfigUpdate = serde_json::from_str(r#"{"speed_limit":null,"proxy":null}"#).unwrap();
+        assert_eq!(cleared.speed_limit, Some(None));
+        assert_eq!(cleared.proxy, Some(None));
+
+        let set: ConfigUpdate = serde_json::from_str(r#"{"speed_limit":"5M","proxy":"http://127.0.0.1:8080"}"#).unwrap();
+        assert_eq!(set.speed_limit, Some(Some("5M".into())));
+        assert_eq!(set.proxy, Some(Some("http://127.0.0.1:8080".into())));
+    }
 }

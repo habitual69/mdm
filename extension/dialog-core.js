@@ -320,6 +320,7 @@
     const laterLabel = el.btnLater ? el.btnLater.querySelector("span") : null;
     const startText = startLabel ? startLabel.textContent : "Start Download";
     const laterText = laterLabel ? laterLabel.textContent : "Download Later";
+    let sizeProbeToken = 0;
 
     let filename = params.filename || "";
     if (!filename && rawUrl) {
@@ -346,10 +347,56 @@
       setFileIcon(cat);
     }
 
-    function showSize(text, stateClass) {
-      if (el.size) el.size.textContent = text;
+    function showSize(text, stateClass, title) {
+      if (el.size) {
+        el.size.textContent = text;
+        el.size.title = title || "";
+      }
       if (el.sizeDot) {
         el.sizeDot.className = "dlg-size-dot" + (stateClass ? " " + stateClass : "");
+      }
+    }
+
+    function probeSize() {
+      if (destroyed) return;
+      if (rawSize > 0) {
+        showSize(`Size: ${fmtBytes(rawSize)}`, "is-verified");
+        return;
+      }
+      if (!rawUrl) {
+        showSize("Size: Unknown (Stream)", "");
+        return;
+      }
+      const token = ++sizeProbeToken;
+      const currentCategory = el.category.value;
+      let probeKind = "";
+      if (currentCategory === "videos") probeKind = "video";
+      else if (currentCategory === "audio") probeKind = "audio";
+      else probeKind = rawKind;
+      showSize("Size: Probing…", "is-probing");
+      try {
+        chrome.runtime.sendMessage(
+          { action: "PROBE_MEDIA_SIZE", url: rawUrl, kind: probeKind, format: rawFormat },
+          (res) => {
+            if (destroyed || token !== sizeProbeToken) return;
+            if (chrome.runtime.lastError || !res || !res.ok || !(res.size > 0)) {
+              showSize("Size: Unknown (Stream)", "");
+              return;
+            }
+            rawSize = res.size;
+            showSize(
+              `Size: ${res.approx ? "~" : ""}${fmtBytes(rawSize)}`,
+              "is-verified",
+              res.approx ? "Estimated from available formats" : ""
+            );
+            if (res.filename && el.filename.value === "download") {
+              el.filename.value = res.filename;
+              updateFilePresentation(res.filename, el.category.value);
+            }
+          }
+        );
+      } catch (_) {
+        showSize("Size: Unknown (Stream)", "");
       }
     }
 
@@ -454,30 +501,7 @@
     el.category.value = initialCategory;
     updateFilePresentation(filename, initialCategory);
 
-    if (rawSize > 0) {
-      showSize(`Size: ${fmtBytes(rawSize)}`, "is-verified");
-    } else {
-      showSize("Size: Probing…", "is-probing");
-      if (rawUrl) {
-        try {
-          chrome.runtime.sendMessage({ action: "PROBE_URL_SIZE", url: rawUrl }, (res) => {
-            if (destroyed) return;
-            if (chrome.runtime.lastError || !res || !res.ok || !(res.size > 0)) {
-              showSize("Size: Unknown (Stream)", "");
-              return;
-            }
-            rawSize = res.size;
-            showSize(`Size: ${fmtBytes(rawSize)}`, "is-verified");
-            if (res.filename && el.filename.value === "download") {
-              el.filename.value = res.filename;
-              updateFilePresentation(res.filename, el.category.value);
-            }
-          });
-        } catch (_) {}
-      } else {
-        showSize("Size: Unknown (Stream)", "");
-      }
-    }
+    probeSize();
 
     // --- Engine status --------------------------------------------------------
     try {
@@ -511,7 +535,10 @@
 
     // --- Event handlers -------------------------------------------------------
     const onFilenameInput = (e) => updateFilePresentation(e.target.value, el.category.value);
-    const onCategoryChange = (e) => updateFilePresentation(el.filename.value, e.target.value);
+    const onCategoryChange = (e) => {
+      updateFilePresentation(el.filename.value, e.target.value);
+      probeSize();
+    };
 
     const onCopy = () => {
       const url = el.url.value;

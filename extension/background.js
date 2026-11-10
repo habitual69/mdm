@@ -533,12 +533,244 @@ async function probeUrlHeaders(url) {
   }
 }
 
+// --- Media page size probing ------------------------------------------------
+// Direct files expose Content-Length. Streaming pages (YouTube etc.) do not,
+// so we read the page's player data or ask yt-dlp for format sizes.
+
+const mediaSizeCache = new Map();
+const MEDIA_SIZE_TTL = 5 * 60 * 1000;
+
+function findJsonObjectAfter(text, marker) {
+  const markerAt = text.indexOf(marker);
+  if (markerAt < 0) return null;
+  const start = text.indexOf("{", markerAt + marker.length);
+  if (start < 0) return null;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i += 1) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"') {
+      inString = true;
+    } else if (ch === "{") {
+      depth += 1;
+    } else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+function bytesOfFormat(f) {
+  const n = Number(f && f.contentLength);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function heightOfFormat(f) {
+  const n = Number(f && f.height);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function videoCodecRank(value) {
+  const s = String(value || "").toLowerCase();
+  if (s.includes("av01") || s.includes("av1")) return 4;
+  if (s.includes("vp9") || s.includes("vp09")) return 3;
+  if (s.includes("avc1") || s.includes("h264")) return 2;
+  return 1;
+}
+
+function youtubeFormatSize(player, kind, format) {
+  const sd = player && player.streamingData;
+  if (!sd) return null;
+  const adaptive = Array.isArray(sd.adaptiveFormats) ? sd.adaptiveFormats : [];
+  const progressive = Array.isArray(sd.formats) ? sd.formats : [];
+  const isAudio = (f) => /^audio\//i.test((f && f.mimeType) || "");
+  const isVideo = (f) => /^video\//i.test((f && f.mimeType) || "");
+
+  const audio = adaptive
+    .filter((f) => isAudio(f) && bytesOfFormat(f) > 0)
+    .sort((a, b) => (Number(b.bitrate) || 0) - (Number(a.bitrate) || 0) || bytesOfFormat(b) - bytesOfFormat(a));
+  const audioBytes = audio.length ? bytesOfFormat(audio[0]) : 0;
+
+  if (kind === "audio") {
+    return audioBytes > 0 ? { size: audioBytes, approx: true } : null;
+  }
+
+  let cap = 0;
+  const capMatch = /height\s*<=\s*(\d+)/i.exec(format || "");
+  if (capMatch) cap = parseInt(capMatch[1], 10);
+
+  let videos = adaptive.filter((f) => isVideo(f) && heightOfFormat(f) > 0 && bytesOfFormat(f) > 0);
+  if (cap > 0) videos = videos.filter((f) => heightOfFormat(f) <= cap);
+  videos.sort((a, b) =>
+    heightOfFormat(b) - heightOfFormat(a) ||
+    (Number(b.fps) || 0) - (Number(a.fps) || 0) ||
+    videoCodecRank(b.mimeType) - videoCodecRank(a.mimeType) ||
+    (Number(b.bitrate) || 0) - (Number(a.bitrate) || 0)
+  );
+
+  let muxed = false;
+  let best = videos[0];
+  if (!best) {
+    let prog = progressive.filter((f) => bytesOfFormat(f) > 0 && (cap > 0 ? heightOfFormat(f) <= cap : true));
+    prog.sort((a, b) =>
+      heightOfFormat(b) - heightOfFormat(a) ||
+      (Number(b.fps) || 0) - (Number(a.fps) || 0) ||
+      videoCodecRank(b.mimeType) - videoCodecRank(a.mimeType) ||
+      (Number(b.bitrate) || 0) - (Number(a.bitrate) || 0)
+    );
+    best = prog[0];
+    muxed = true;
+  }
+  if (!best) return null;
+  const total = bytesOfFormat(best) + (muxed ? 0 : audioBytes);
+  return total > 0 ? { size: total, approx: true } : null;
+}
+
+async function fetchYoutubePlayer(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(url, {
+      credentials: "include",
+      redirect: "follow",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+    const json = findJsonObjectAfter(html, "ytInitialPlayerResponse");
+    if (!json) return null;
+    try {
+      return JSON.parse(json);
+    } catch (_) {
+      return null;
+    }
+  } catch (_) {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function sizeFromMediaInfo(data, kind, format) {
+  const formats = data && Array.isArray(data.formats) ? data.formats : [];
+  if (!formats.length) return null;
+  const duration = Number(data.duration) || 0;
+  const isAudioOnly = (f) => {
+    const v = String(f.vcodec || "").toLowerCase();
+    const a = String(f.acodec || "").toLowerCase();
+    return v === "none" && a && a !== "none";
+  };
+  const isVideo = (f) => {
+    const v = String(f.vcodec || "").toLowerCase();
+    return v && v !== "none";
+  };
+  const sizeOf = (f) => {
+    const approx = Number(f.filesize_approx);
+    if (Number.isFinite(approx) && approx > 0) return approx;
+    const rate = Number(f.tbr || f.abr || 0);
+    return rate > 0 && duration > 0 ? Math.round((rate * 1000 / 8) * duration) : 0;
+  };
+  const heightOf = (f) => Number(f.height) || parseInt(String(f.resolution || ""), 10) || 0;
+  const bestBy = (arr, value) => arr.reduce((best, f) => (value(f) > value(best) ? f : best), arr[0]);
+
+  if (kind === "audio") {
+    const audios = formats.filter((f) => isAudioOnly(f) && sizeOf(f) > 0);
+    if (!audios.length) return null;
+    const best = bestBy(audios, (f) => Number(f.abr || f.tbr || 0) * 1e6 + sizeOf(f));
+    return { size: sizeOf(best), approx: true };
+  }
+
+  let cap = 0;
+  const capMatch = /height\s*<=\s*(\d+)/i.exec(format || "");
+  if (capMatch) cap = parseInt(capMatch[1], 10);
+
+  let videos = formats.filter((f) => isVideo(f) && heightOf(f) > 0 && sizeOf(f) > 0);
+  if (cap > 0) videos = videos.filter((f) => heightOf(f) <= cap);
+  if (!videos.length) return null;
+
+  const videoOnly = videos.filter((f) => {
+    const a = String(f.acodec || "").toLowerCase();
+    return a === "none" || a === "";
+  });
+  const pool = videoOnly.length ? videoOnly : videos;
+  const video = bestBy(
+    pool,
+    (f) =>
+      heightOf(f) * 1e15 +
+      (Number(f.fps) || 0) * 1e12 +
+      videoCodecRank(f.vcodec) * 1e9 +
+      Number(f.tbr || 0) * 1e6 +
+      sizeOf(f)
+  );
+  const muxed = String(video.acodec || "").toLowerCase() !== "none" && !!video.acodec;
+  let total = sizeOf(video);
+  if (!muxed) {
+    const audios = formats.filter((f) => isAudioOnly(f) && sizeOf(f) > 0);
+    if (audios.length) {
+      const audio = bestBy(audios, (f) => Number(f.abr || f.tbr || 0) * 1e6 + sizeOf(f));
+      total += sizeOf(audio);
+    }
+  }
+  return total > 0 ? { size: total, approx: true } : null;
+}
+
+async function getMediaInfoCached(url) {
+  const hit = mediaSizeCache.get("info:" + url);
+  if (hit && Date.now() - hit.at < MEDIA_SIZE_TTL) return hit.value;
+  const info = await fetchMediaInfo(url);
+  if (info.ok && info.data) {
+    mediaSizeCache.set("info:" + url, { at: Date.now(), value: info });
+  }
+  return info;
+}
+
+async function probeMediaSize(url, kind, format) {
+  if (!url) return { ok: true, size: 0, approx: false };
+
+  const isYoutube = /^https?:\/\/([^/]+\.)?(youtube\.com|youtu\.be)\//i.test(url);
+  if (isYoutube) {
+    const cached = mediaSizeCache.get("size:" + url + ":" + (kind || "") + ":" + (format || ""));
+    if (cached && Date.now() - cached.at < MEDIA_SIZE_TTL) return cached.value;
+    try {
+      const player = await fetchYoutubePlayer(url);
+      const picked = player ? youtubeFormatSize(player, kind, format) : null;
+      if (picked) {
+        const result = { ok: true, ...picked };
+        mediaSizeCache.set("size:" + url + ":" + (kind || "") + ":" + (format || ""), { at: Date.now(), value: result });
+        return result;
+      }
+    } catch (_) {}
+  }
+
+  // Direct file: exact Content-Length.
+  const head = await probeUrlHeaders(url);
+  if (head.ok && head.size > 0 && !/text\/html/i.test(head.contentType || "")) {
+    return { ok: true, size: head.size, approx: false };
+  }
+
+  // Page/stream fallback: reuse the app's yt-dlp format list.
+  const info = await getMediaInfoCached(url);
+  if (info.ok && info.data) {
+    const picked = sizeFromMediaInfo(info.data, kind, format);
+    if (picked) return { ok: true, ...picked };
+  }
+  return { ok: true, size: 0, approx: false };
+}
+
 async function fetchMediaInfo(url) {
   try {
     const res = await fetch(`${MDM_API_BASE}/api/media-info`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url }),
+      signal: AbortSignal.timeout(25000),
     });
     if (res.ok) {
       const data = await res.json();
@@ -577,6 +809,10 @@ function showNotification(title, message, status = "info") {
 chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
   if (req.action === "PROBE_URL_SIZE") {
     probeUrlHeaders(req.url).then(sendResponse);
+    return true; // async
+  }
+  if (req.action === "PROBE_MEDIA_SIZE") {
+    probeMediaSize(req.url, req.kind, req.format).then(sendResponse);
     return true; // async
   }
   if (req.action === "TRIGGER_DOWNLOAD_DIALOG") {
