@@ -124,6 +124,10 @@ async fn ui_static(Path(path): Path<String>) -> Response {
     let mut resp = Response::new(axum::body::Body::from(bytes));
     resp.headers_mut()
         .insert(header::CONTENT_TYPE, HeaderValue::from_static(mime));
+    resp.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("no-store, no-cache, must-revalidate"),
+    );
     resp
 }
 

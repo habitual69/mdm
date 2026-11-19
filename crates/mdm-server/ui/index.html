@@ -295,9 +295,9 @@
           <p class="hero-sub">Works with YouTube, Instagram, TikTok and 1,000+ other sites.<br>
           Torrents and magnets run through <b>aria2</b>.</p>
           <div class="stats">
-            <button class="stat" data-nav="#/downloads"><b id="stat-running">0</b><span>running</span></button>
-            <button class="stat" data-nav="#/downloads"><b id="stat-queued">0</b><span>queued</span></button>
-            <button class="stat" data-nav="#/downloads"><b id="stat-done">0</b><span>finished</span></button>
+            <button class="stat" data-nav="#/downloads" data-state="active"><b id="stat-running">0</b><span>running</span></button>
+            <button class="stat" data-nav="#/downloads" data-state="active"><b id="stat-queued">0</b><span>queued</span></button>
+            <button class="stat" data-nav="#/downloads" data-state="done"><b id="stat-done">0</b><span>finished</span></button>
           </div>
         </div>
       </div>
@@ -345,10 +345,10 @@
 
       <div class="dl-filter-row">
         <div class="chips" id="state-chips">
-          <button class="chip on" data-state="all">All <b class="chip-n" id="n-all">0</b></button>
-          <button class="chip" data-state="active">Active <b class="chip-n" id="n-active">0</b></button>
-          <button class="chip" data-state="done">Completed <b class="chip-n" id="n-done">0</b></button>
+          <button class="chip on" data-state="active">Active <b class="chip-n" id="n-active">0</b></button>
+          <button class="chip" data-state="done">Downloaded <b class="chip-n" id="n-done">0</b></button>
           <button class="chip" data-state="failed">Failed <b class="chip-n" id="n-failed">0</b></button>
+          <button class="chip" data-state="all">All <b class="chip-n" id="n-all">0</b></button>
         </div>
         <div class="bulk-actions" id="bulk-actions">
           <button type="button" class="btn-bulk" id="btn-resume-all" title="Resume all paused and failed downloads">

@@ -168,10 +168,11 @@ function jobIcon(job) {
 const jobs = new Map();   // id -> job (latest)
 const cards = new Map();  // id -> { el, refs }
 let kindFilter = null;    // null | 'video'|'audio'|'torrents'|'files'
-let stateFilter = "all";  // all | active | done | failed
+let stateFilter = "active";  // all | active | done | failed
 let searchQuery = "";
 let qualityFmt = "";      // quality segment format value
 let cfgCache = null;      // last known config
+let settingsLoaded = false;
 
 // thumbnail sources; the <img> falls back to the kind icon on error.
 function ytId(url) {
@@ -832,9 +833,11 @@ function sync() {
 
   const anyVisible = list.some(visible);
   $("empty").classList.toggle("hidden", anyVisible);
-  $("empty").textContent = stateFilter === "all"
-    ? "Nothing here yet — add a link from Home."
-    : "No downloads match this filter.";
+  $("empty").textContent =
+    stateFilter === "active" ? "No active downloads." :
+    stateFilter === "done" ? "No downloaded files yet." :
+    stateFilter === "failed" ? "No failed downloads." :
+    "Nothing here yet — add a link from Home.";
 
   // header summary
   const saved = list
@@ -1505,10 +1508,12 @@ $("add-form").addEventListener("submit", async (e) => {
 // ---------- settings ----------
 
 async function loadSettings() {
+  settingsLoaded = false;
   try {
     const res = await fetch("/api/config");
     if (!res.ok) throw new Error(res.status);
     const cfg = await res.json();
+    settingsLoaded = true;
     cfgCache = cfg;
     $("set-output-dir").value = cfg.output_dir || "";
     $("set-max-concurrent").value = cfg.max_concurrent;
@@ -1570,6 +1575,10 @@ $("settings-form").addEventListener("change", () => {
 
 $("settings-form").addEventListener("submit", async (e) => {
   e.preventDefault();
+  if (!settingsLoaded) {
+    notice("Settings are still loading — try again in a moment.", true);
+    return;
+  }
   const body = {
     output_dir: $("set-output-dir").value.trim(),
     max_concurrent: Number($("set-max-concurrent").value) || undefined,
@@ -2253,7 +2262,15 @@ for (const btn of document.querySelectorAll(".nav-item.cat")) {
   btn.addEventListener("click", () => go(btn.dataset.kind));
 }
 for (const btn of document.querySelectorAll(".stat")) {
-  btn.addEventListener("click", () => go("#/downloads"));
+  btn.addEventListener("click", () => {
+    if (btn.dataset.state) {
+      stateFilter = btn.dataset.state;
+      for (const c of $("state-chips").children) {
+        c.classList.toggle("on", c.dataset.state === stateFilter);
+      }
+    }
+    go("#/downloads");
+  });
 }
 $("go-add").addEventListener("click", () => {
   go("#/home");
@@ -2469,6 +2486,10 @@ tbTransferBtn?.addEventListener("click", (e) => {
 sheetCloseBtn?.addEventListener("click", () => toggleActiveSheet(false));
 sheetViewAll?.addEventListener("click", () => {
   toggleActiveSheet(false);
+  stateFilter = "all";
+  for (const c of $("state-chips").children) {
+    c.classList.toggle("on", c.dataset.state === "all");
+  }
   go("#/downloads");
 });
 
