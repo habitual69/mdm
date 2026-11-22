@@ -5,14 +5,14 @@
 </p>
 
 <p align="center">
-  <b>A fast, unified dual-engine media download manager for Linux & Windows.</b><br>
+  <b>A fast, unified dual-engine media download manager for Linux, macOS & Windows.</b><br>
   Built with <b>Rust</b>, <b>Tauri v2</b>, <b>yt-dlp</b> (1,000+ streaming sites), and <b>aria2</b> (high-throughput multi-connection HTTP, BitTorrent & Magnet).
 </p>
 
 <p align="center">
   <a href="https://github.com/habitual69/mdm/releases"><img src="https://img.shields.io/github/v/release/habitual69/mdm?color=brightgreen&style=flat-square" alt="Latest Release"></a>
   <a href="https://github.com/habitual69/mdm/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/habitual69/mdm/ci.yml?branch=master&label=CI&style=flat-square" alt="CI Status"></a>
-  <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20Windows-blue?style=flat-square" alt="Platform">
+  <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-blue?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/badge/Rust-1.80%2B-orange?style=flat-square&logo=rust" alt="Rust">
   <img src="https://img.shields.io/badge/Tauri-v2-24C8DB?style=flat-square&logo=tauri" alt="Tauri">
   <img src="https://img.shields.io/badge/Engines-yt--dlp%20%7C%20aria2%20%7C%20ffmpeg-success?style=flat-square" alt="Engines">
@@ -119,6 +119,7 @@ mDm operates as a standalone native desktop app (via Tauri v2), a headless backg
 | Platform | Architecture | Supported Formats | Requirements | Notes |
 | :--- | :---: | :--- | :--- | :--- |
 | **Windows 10 / 11** | `x86_64` | • NSIS Installer (`.exe`)<br>• Portable Archive (`.zip`)<br>• Standalone CLI (`.exe`) | Microsoft Edge WebView2 (bundled bootstrapper fallback included) | Full system tray, floating speed widget, Start menu shortcuts, uninstaller |
+| **macOS 11+** | `arm64` (Apple Silicon) | • Disk Image (`.dmg`)<br>• Standalone CLI (`.tar.gz`) | macOS 11 or later | Native tray, floating speed widget. Unsigned build — first launch: right-click the app → Open |
 | **Ubuntu / Debian / Mint / Pop!_OS** | `x86_64` | • Debian Package (`.deb`)<br>• Universal AppImage (`.AppImage`)<br>• Standalone CLI (`.tar.gz`) | WebKitGTK 4.1 (`libwebkit2gtk-4.1-dev`) | Native AppIndicator tray integration, desktop entry, auto-mime routing |
 | **Fedora / RHEL / Arch / Generic Linux** | `x86_64` | • Universal AppImage (`.AppImage`)<br>• Standalone Binaries (`.tar.gz`) | Standard glibc, FUSE (for AppImage) | Runs standalone on any modern Linux desktop environment (GNOME, KDE, XFCE) |
 | **Browser Extension** | Cross-platform | • Chromium Manifest V3 (`.zip`) | Chrome, Edge, Brave, Vivaldi, Opera | Unpacked developer mode loading with 1-click page media interception |
@@ -149,6 +150,19 @@ Download the latest release for your platform from the **[GitHub Releases](https
 #### Option 3: Standalone CLI
 1. Download `mdm-cli-<version>-windows-x64.zip`.
 2. Extract `mdm.exe` and add it to your system `PATH`.
+
+---
+
+### macOS (Apple Silicon)
+
+#### Option 1: Disk Image (.dmg)
+1. Download `mDm Media Download Manager_<version>_aarch64.dmg`.
+2. Open the .dmg and drag mDm into Applications.
+3. First launch: right-click the app and choose **Open**. The build is unsigned, so macOS Gatekeeper blocks a plain double-click the first time.
+
+#### Option 2: Standalone CLI
+1. Download `mdm-cli-<version>-macos-aarch64.tar.gz`.
+2. Extract it and move `mdm` somewhere on your `PATH` (e.g. `/usr/local/bin`).
 
 ---
 
@@ -359,6 +373,10 @@ npx @tauri-apps/cli dev
 # 5. Build production Linux packages (.deb & .AppImage)
 npx @tauri-apps/cli build --bundles deb,appimage
 # Result: target/release/bundle/deb/ & target/release/bundle/appimage/
+
+# 6. Build production macOS disk image (.dmg) — on a Mac, or via GitHub Actions
+npx @tauri-apps/cli build --bundles dmg
+# Result: target/release/bundle/dmg/
 ```
 
 ### Windows Packaging
@@ -387,6 +405,8 @@ mDm uses GitHub Actions for continuous integration and automated releases:
   - Windows self-contained NSIS installer (`.exe`)
   - Windows portable ZIP archive (`.zip`)
   - Windows CLI archive (`.zip`)
+  - macOS disk image (`.dmg`, Apple Silicon)
+  - macOS standalone CLI archive (`.tar.gz`)
   - Companion browser extension package (`.zip`)
   - Cryptographic checksum manifest (`SHA256SUMS.txt`)
   - GitHub Release with auto-generated release notes
