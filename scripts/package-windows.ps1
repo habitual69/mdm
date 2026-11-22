@@ -182,6 +182,28 @@ if (-not (Test-Path $Aria)) {
     }
 }
 
+# Direct fallback if ffmpeg or ffprobe are still missing (the log showed
+# ffmpeg missing from the package — yt-dlp/aria2c had fallbacks, ffmpeg did not)
+$Ffmpeg = Join-Path $PackageBinDir "ffmpeg.exe"
+$Ffprobe = Join-Path $PackageBinDir "ffprobe.exe"
+if ((-not (Test-Path $Ffmpeg)) -or (-not (Test-Path $Ffprobe))) {
+    try {
+        Write-Host "  -> Downloading ffmpeg/ffprobe directly..." -ForegroundColor Cyan
+        $FfmpegZip = Join-Path $DistDir "ffmpeg_temp.zip"
+        Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile $FfmpegZip -TimeoutSec 120
+        $FfmpegDir = Join-Path $DistDir "ffmpeg_ext"
+        Expand-Archive -Path $FfmpegZip -DestinationPath $FfmpegDir -Force
+        $FoundFfmpeg = Get-ChildItem -Path $FfmpegDir -Filter "ffmpeg.exe" -Recurse | Select-Object -First 1
+        $FoundFfprobe = Get-ChildItem -Path $FfmpegDir -Filter "ffprobe.exe" -Recurse | Select-Object -First 1
+        if ($FoundFfmpeg) { Copy-Item -Path $FoundFfmpeg.FullName -Destination $Ffmpeg -Force; Write-Host "  -> Successfully fetched ffmpeg.exe" -ForegroundColor Green }
+        if ($FoundFfprobe) { Copy-Item -Path $FoundFfprobe.FullName -Destination $Ffprobe -Force; Write-Host "  -> Successfully fetched ffprobe.exe" -ForegroundColor Green }
+        Remove-Item -Recurse -Force $FfmpegDir -ErrorAction SilentlyContinue
+        Remove-Item -Force $FfmpegZip -ErrorAction SilentlyContinue
+    } catch {
+        Write-Host "  -> Note: ffmpeg direct download skipped ($($_.Exception.Message))" -ForegroundColor Yellow
+    }
+}
+
 # Copy application icon
 $AppIcon = Join-Path $RootDir "mdm-app\src-tauri\icons\icon.ico"
 if (Test-Path $AppIcon) {
@@ -203,7 +225,7 @@ if (Test-Path $ExtSourceDir) {
 
 # 4. Create Portable ZIP distribution
 Write-Host "[4/5] Creating Portable ZIP package..." -ForegroundColor Yellow
-$ZipPath = Join-Path $DistDir "mDm_Portable_0.1.0-alpha.2_x64.zip"
+$ZipPath = Join-Path $DistDir "mDm_Portable_0.1.0-alpha.3_x64.zip"
 if (Test-Path $ZipPath) { Remove-Item -Force $ZipPath }
 Compress-Archive -Path "$PackageDir\*" -DestinationPath $ZipPath -CompressionLevel Optimal
 $zipSizeMB = [math]::Round((Get-Item $ZipPath).Length / 1MB, 2)
@@ -232,16 +254,22 @@ if (-not $MakeNsis) {
 if ($MakeNsis) {
     Write-Host "  -> Using makensis: $MakeNsis" -ForegroundColor Green
     $NsiScript = Join-Path $ScriptDir "installer.nsi"
-    & $MakeNsis $NsiScript
-    $InstallerExe = Join-Path $DistDir "mDm_Setup_0.1.0-alpha.2_x64.exe"
+    # NSIS resolves relative paths (OutFile, File, MUI_ICON) from the working
+    # directory, so compile from the script folder, not the repo root.
+    Push-Location $ScriptDir
+    try {
+        & $MakeNsis $NsiScript
+        if ($LASTEXITCODE -ne 0) { throw "makensis failed with exit code $LASTEXITCODE" }
+    } finally {
+        Pop-Location
+    }
+    $InstallerExe = Join-Path $DistDir "mDm_Setup_0.1.0-alpha.3_x64.exe"
     if (Test-Path $InstallerExe) {
         $instSizeMB = [math]::Round((Get-Item $InstallerExe).Length / 1MB, 2)
         Write-Host "  -> Successfully generated installer: $InstallerExe ($instSizeMB MB)" -ForegroundColor Green
     }
 } else {
-    Write-Host "  -> Note: makensis not found in PATH or standard Program Files." -ForegroundColor Yellow
-    Write-Host "     The self-contained installer script is prepared and ready at: scripts\installer.nsi" -ForegroundColor Cyan
-    Write-Host "     To compile: & makensis scripts\installer.nsi" -ForegroundColor Gray
+    throw "makensis not found — install NSIS (choco install nsis -y). The installer is required; refusing to ship a release without it."
 }
 
 Write-Host "`nWindows Packaging Completed Successfully!" -ForegroundColor Green
