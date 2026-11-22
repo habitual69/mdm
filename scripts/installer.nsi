@@ -3,7 +3,7 @@ Unicode True
 
 !define PRODUCT_NAME "mDm Media Download Manager"
 !define PRODUCT_SHORT_NAME "mDm"
-!define PRODUCT_VERSION "0.1.0-alpha.2"
+!define PRODUCT_VERSION "0.1.0-alpha.3"
 !define PRODUCT_PUBLISHER "mDm Project"
 !define PRODUCT_WEB_SITE "https://github.com/habitual69/mdm"
 !define MAIN_EXE "mDm Media Download Manager.exe"
