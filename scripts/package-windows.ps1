@@ -203,7 +203,7 @@ if (Test-Path $ExtSourceDir) {
 
 # 4. Create Portable ZIP distribution
 Write-Host "[4/5] Creating Portable ZIP package..." -ForegroundColor Yellow
-$ZipPath = Join-Path $DistDir "mDm_Portable_0.1.0-alpha.1_x64.zip"
+$ZipPath = Join-Path $DistDir "mDm_Portable_0.1.0-alpha.2_x64.zip"
 if (Test-Path $ZipPath) { Remove-Item -Force $ZipPath }
 Compress-Archive -Path "$PackageDir\*" -DestinationPath $ZipPath -CompressionLevel Optimal
 $zipSizeMB = [math]::Round((Get-Item $ZipPath).Length / 1MB, 2)
@@ -233,7 +233,7 @@ if ($MakeNsis) {
     Write-Host "  -> Using makensis: $MakeNsis" -ForegroundColor Green
     $NsiScript = Join-Path $ScriptDir "installer.nsi"
     & $MakeNsis $NsiScript
-    $InstallerExe = Join-Path $DistDir "mDm_Setup_0.1.0-alpha.1_x64.exe"
+    $InstallerExe = Join-Path $DistDir "mDm_Setup_0.1.0-alpha.2_x64.exe"
     if (Test-Path $InstallerExe) {
         $instSizeMB = [math]::Round((Get-Item $InstallerExe).Length / 1MB, 2)
         Write-Host "  -> Successfully generated installer: $InstallerExe ($instSizeMB MB)" -ForegroundColor Green
