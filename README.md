@@ -19,6 +19,10 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License"></a>
 </p>
 
+<p align="center">
+  <b>Download:</b> <a href="https://habitual69.github.io/mdm">habitual69.github.io/mdm</a> &middot; Full story: <a href="https://www.arbindbuilds.com/blog/i-built-an-open-source-download-manager-in-rust-meet-mdm">arbindbuilds.com</a>
+</p>
+
 ---
 
 ## Overview
