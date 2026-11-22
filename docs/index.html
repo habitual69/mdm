@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mDm — Media Download Manager</title>
+<meta name="description" content="mDm is a free, open-source download manager that combines yt-dlp and aria2 into one fast desktop app — 4K video, full playlists, torrents, and a floating speed widget. Linux, macOS & Windows.">
+<link rel="icon" href="https://raw.githubusercontent.com/habitual69/mdm/master/mdm-app/src-tauri/icons/icon.png">
+<style>
+  /* Theme tokens copied from the mDm app itself (crates/mdm-server/ui/styles.css) */
+  :root {
+    color-scheme: dark;
+    --bg: #0c0e12;
+    --panel: #14181f;
+    --panel-2: #1b202a;
+    --line: #262d39;
+    --line-soft: #20262f;
+    --text: #e8ebf1;
+    --muted: #98a2b3;
+    --accent: #e8934a;
+    --accent-2: #f2a95c;
+    --ok: #3ecf8e;
+    --radius: 14px;
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #f1f5f9;
+    --panel: #ffffff;
+    --panel-2: #f8fafc;
+    --line: #e2e8f0;
+    --line-soft: #edf2f7;
+    --text: #0f172a;
+    --muted: #64748b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 20px; }
+
+  /* ---------- nav ---------- */
+  nav { border-bottom: 1px solid var(--line-soft); }
+  nav .wrap { display: flex; align-items: center; gap: 10px; height: 56px; }
+  .brand { display: flex; align-items: center; gap: 10px; color: var(--text); font-weight: 700; font-size: 17px; }
+  .brand:hover { text-decoration: none; }
+  .brand img { width: 28px; height: 28px; border-radius: 7px; }
+  nav .spacer { flex: 1; }
+  nav a.nav-link { color: var(--muted); font-size: 14px; margin-left: 18px; }
+  nav a.nav-link:hover { color: var(--text); text-decoration: none; }
+  .theme-btn {
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--muted);
+    border-radius: 99px; padding: 4px 12px; font: inherit; font-size: 13px; cursor: pointer;
+  }
+  .theme-btn:hover { color: var(--text); }
+
+  /* ---------- hero ---------- */
+  header.hero { padding: 64px 0 40px; text-align: center; }
+  .badge {
+    display: inline-block; background: var(--panel-2); border: 1px solid var(--line);
+    color: var(--muted); border-radius: 99px; padding: 4px 14px; font-size: 13px; margin-bottom: 18px;
+  }
+  .badge b { color: var(--accent-2); font-weight: 600; }
+  h1 { font-size: 44px; line-height: 1.1; margin: 0 0 12px; letter-spacing: -0.5px; }
+  h1 span { color: var(--accent); }
+  .lede { color: var(--muted); font-size: 18px; max-width: 640px; margin: 0 auto 28px; }
+  .cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; background: var(--accent); color: #14100a; font-weight: 700;
+    border-radius: var(--radius); padding: 12px 22px; font-size: 15px; border: 1px solid transparent;
+  }
+  .btn:hover { background: var(--accent-2); text-decoration: none; }
+  .btn.ghost { background: var(--panel); color: var(--text); border-color: var(--line); font-weight: 600; }
+  .btn.ghost:hover { background: var(--panel-2); }
+  .fineprint { color: var(--muted); font-size: 13px; margin-top: 16px; }
+
+  /* ---------- download cards ---------- */
+  section { padding: 28px 0; }
+  h2 { font-size: 22px; margin: 0 0 4px; }
+  .section-sub { color: var(--muted); margin: 0 0 18px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 20px;
+  }
+  .card h3 { margin: 0 0 4px; font-size: 17px; }
+  .card p { color: var(--muted); font-size: 14px; margin: 0 0 16px; }
+  .dl {
+    display: block; background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; color: var(--text);
+  }
+  .dl:hover { border-color: var(--accent); text-decoration: none; }
+  .dl b { display: block; font-size: 14px; }
+  .dl span { color: var(--muted); font-size: 12px; }
+  .dl.primary { background: var(--accent); border-color: var(--accent); color: #14100a; }
+  .dl.primary b { color: #14100a; }
+  .dl.primary span { color: rgba(20,16,10,.7); }
+  .dl.primary:hover { background: var(--accent-2); }
+
+  /* ---------- screenshots ---------- */
+  .shots { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .shots { grid-template-columns: 1fr; } }
+  .shot { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
+  .shot img { width: 100%; display: block; border-radius: 10px; border: 1px solid var(--line-soft); }
+  .shot figcaption { color: var(--muted); font-size: 13px; margin-top: 10px; text-align: center; }
+
+  /* ---------- features ---------- */
+  .feat h3 { margin: 0 0 6px; font-size: 16px; }
+  .feat h3 .dot { color: var(--accent); }
+  .feat p { color: var(--muted); font-size: 14px; margin: 0; }
+
+  /* ---------- story / footer ---------- */
+  .story {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 28px; text-align: center;
+  }
+  .story h2 { margin-bottom: 8px; }
+  .story p { color: var(--muted); max-width: 560px; margin: 0 auto 18px; }
+  footer { border-top: 1px solid var(--line-soft); padding: 24px 0 40px; color: var(--muted); font-size: 13px; text-align: center; }
+  footer a { color: var(--muted); }
+  footer a:hover { color: var(--text); }
+</style>
+</head>
+<body>
+<nav>
+  <div class="wrap">
+    <a class="brand" href="./">
+      <img src="https://raw.githubusercontent.com/habitual69/mdm/master/mdm-app/src-tauri/icons/icon.png" alt="mDm icon">
+      mDm
+    </a>
+    <div class="spacer"></div>
+    <a class="nav-link" href="https://www.arbindbuilds.com/blog/i-built-an-open-source-download-manager-in-rust-meet-mdm">Blog</a>
+    <a class="nav-link" href="https://github.com/habitual69/mdm">GitHub</a>
+    <a class="nav-link" href="https://github.com/habitual69/mdm/releases">Releases</a>
+    <button class="theme-btn" id="themeBtn" type="button">Light</button>
+  </div>
+</nav>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="badge">v0.1.0-alpha.3 &middot; <b>Pre-release</b></div>
+    <h1>mDm <span>&mdash; Media Download Manager</span></h1>
+    <p class="lede">A free, open-source download manager that puts yt-dlp and aria2 into one fast desktop app &mdash; 4K video, full playlists with album art, torrents, and a floating speed widget.</p>
+    <div class="cta-row">
+      <a class="btn" href="https://github.com/habitual69/mdm/releases/download/v0.1.0-alpha.3/mDm_Setup_0.1.0-alpha.3_x64.exe">Download for Windows</a>
+      <a class="btn ghost" href="#download">All downloads</a>
+    </div>
+    <p class="fineprint">Free forever &middot; MIT licensed &middot; No ads, no accounts, no paywall</p>
+  </header>
+
+  <section id="download">
+    <h2>Download</h2>
+    <p class="section-sub">Pick your platform. Every build below is v0.1.0-alpha.3, straight from the GitHub release.</p>
+    <div class="grid">
+      <div class="card">
+        <h3>Windows</h3>
+        <p>Windows 10 / 11, x64. The installer bundles everything the app needs.</p>
+        <a class="dl primary" href="https://github.com/habitual69/mdm/releases/download/v0.1.0-alpha.3/mDm_Setup_0.1.0-alpha.3_x64.exe"><b>Installer (.exe)</b><span>Recommended &middot; 91 MB</span></a>
+        <a class="dl" href="https://github.com/habitual69/mdm/releases/download/v0.1.0-alpha.3/mDm_Portable_0.1.0-alpha.3_x64.zip"><b>Portable ZIP</b><span>No install, extract and run &middot; 118 MB</span></a>
+        <a class="dl" href="https://github.com/habitual69/mdm/releases/download/v0.1.0-alpha.3/mdm-cli-0.1.0-alpha.3-windows-x64.zip"><b>CLI only (.zip)</b><span>mdm.exe &middot; 5 MB</span></a>
+      </div>
+      <div class="card">
+        <h3>macOS</h3>
+        <p>Apple Silicon (arm64), macOS 11+. Unsigned build &mdash; first launch: right-click the app, then Open.</p>
+        <a class="dl primary" href="https://github.com/habitual69/mdm/releases/download/v0.1.0-alpha.3/mDm.Media.Download.Manager_0.1.0-alpha.3_aarch64.dmg"><b>Disk image (.dmg)</b><span>Drag to Applications &middot; 7.4 MB</span></a>
+        <a class="dl" href="https://github.com/habitual69/mdm/releases/download/v0.1.0-alpha.3/mdm-cli-0.1.0-alpha.3-macos-aarch64.tar.gz"><b>CLI only (.tar.gz)</b><span>mdm binary &middot; 4.9 MB</span></a>
+      </div>
+      <div class="card">
+        <h3>Linux</h3>
+        <p>Ubuntu / Debian / Mint / Pop!_OS and friends, x86_64.</p>
+        <a class="dl primary" href="https://github.com/habitual69/mdm/releases/download/v0.1.0-alpha.3/mDm.Media.Download.Manager_0.1.0-alpha.3_amd64.deb"><b>Debian package (.deb)</b><span>8 MB</span></a>
+        <a class="dl" href="https://github.com/habitual69/mdm/releases/download/v0.1.0-alpha.3/mDm.Media.Download.Manager_0.1.0-alpha.3_amd64.AppImage"><b>AppImage</b><span>Runs anywhere &middot; 82 MB</span></a>
+        <a class="dl" href="https://github.com/habitual69/mdm/releases/download/v0.1.0-alpha.3/mdm-0.1.0-alpha.3-linux-x86_64.tar.gz"><b>CLI only (.tar.gz)</b><span>mdm binary &middot; 5 MB</span></a>
+      </div>
+    </div>
+    <p class="fineprint" style="margin-top:14px">Also on the release page: the <a href="https://github.com/habitual69/mdm/releases/download/v0.1.0-alpha.3/mdm-browser-extension.zip">Chromium browser extension</a> and <a href="https://github.com/habitual69/mdm/releases/download/v0.1.0-alpha.3/SHA256SUMS.txt">SHA256SUMS.txt</a> to verify your download. &middot; <a href="https://github.com/habitual69/mdm/releases">All releases</a></p>
+  </section>
+
+  <section>
+    <h2>See it in action</h2>
+    <p class="section-sub">The real app, not a mockup.</p>
+    <div class="shots">
+      <figure class="shot">
+        <img src="screenshots/home.png" alt="mDm home screen">
+        <figcaption>Home &mdash; paste a URL, pick a quality, done</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="screenshots/downloads.png" alt="mDm downloads view">
+        <figcaption>Downloads &mdash; queue, progress, and speeds at a glance</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="screenshots/settings.png" alt="mDm settings">
+        <figcaption>Settings &mdash; engines, folders, and behaviour</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="screenshots/widget.png" alt="mDm floating speed widget">
+        <figcaption>The floating speed widget</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>Why mDm</h2>
+    <p class="section-sub">Four things that make it different from the dozen other downloaders.</p>
+    <div class="grid">
+      <div class="card feat">
+        <h3><span class="dot">&#9679;</span> Dual-engine speed</h3>
+        <p>yt-dlp handles 1,000+ sites, playlists and audio extraction. aria2 takes over the raw transfer at up to 16 parallel connections, plus torrents and magnets. The handoff is automatic.</p>
+      </div>
+      <div class="card feat">
+        <h3><span class="dot">&#9679;</span> Floating speed widget</h3>
+        <p>A small frameless pill on your desktop showing live download and upload speed. Double-click it and the main window comes back. Three styles, stays out of the way.</p>
+      </div>
+      <div class="card feat">
+        <h3><span class="dot">&#9679;</span> CLI, daemon &amp; API</h3>
+        <p><code>mdm add &lt;url&gt;</code> does video, audio, files and torrents. <code>mdm daemon</code> runs a headless server with a web UI and REST API on your machine.</p>
+      </div>
+      <div class="card feat">
+        <h3><span class="dot">&#9679;</span> Browser extension</h3>
+        <p>A Chromium extension that spots playable video on a page and shows a one-click download bar, IDM-style. Right-click any link or media and send it straight to mDm.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="story">
+      <h2>Built in the open</h2>
+      <p>mDm is free and open source (MIT). I wrote up why I built it, how the two engines work together, and what&rsquo;s next &mdash; read the full story on my site.</p>
+      <a class="btn" href="https://www.arbindbuilds.com/blog/i-built-an-open-source-download-manager-in-rust-meet-mdm">Read the story on arbindbuilds.com</a>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <div class="wrap">
+    mDm v0.1.0-alpha.3 &middot; Free &amp; open source (MIT) &middot;
+    <a href="https://github.com/habitual69/mdm">Source on GitHub</a> &middot;
+    <a href="https://github.com/habitual69/mdm/issues">Report an issue</a><br>
+    Alpha software &mdash; things may break. If something does, tell me; that&rsquo;s the fastest way it gets better.
+  </div>
+</footer>
+
+<script>
+  // Theme toggle mirrors the app's own light/dark switch.
+  var btn = document.getElementById('themeBtn');
+  function setTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    btn.textContent = t === 'light' ? 'Dark' : 'Light';
+    try { localStorage.setItem('mdm-site-theme', t); } catch (e) {}
+  }
+  btn.addEventListener('click', function () {
+    setTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
+  });
+  try {
+    var saved = localStorage.getItem('mdm-site-theme');
+    if (saved) setTheme(saved);
+  } catch (e) {}
+</script>
+</body>
+</html>
